@@ -104,6 +104,20 @@ export const mockOrders: Order[] = [
     estimatedTime: 0,
     createdAt: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
     updatedAt: new Date(Date.now() - 5 * 60 * 1000)   // 5 minutes ago
+  },
+  {
+    id: "ORD-004",
+    items: [
+      { menuItem: mockMenuItems[0], quantity: 1 },
+      { menuItem: mockMenuItems[2], quantity: 1 }
+    ],
+    customerName: "Sarah Wilson",
+    customerPhone: "+1234567893",
+    totalAmount: 22.98,
+    status: "picked",
+    estimatedTime: 0,
+    createdAt: new Date(Date.now() - 90 * 60 * 1000), // 1.5 hours ago
+    updatedAt: new Date(Date.now() - 30 * 60 * 1000)  // 30 minutes ago
   }
 ];
 
@@ -125,6 +139,7 @@ export const mockAnalytics: OrderAnalytics = {
   ordersByStatus: [
     { status: "queued", count: 8 },
     { status: "preparing", count: 12 },
-    { status: "ready", count: 3 }
+    { status: "ready", count: 3 },
+    { status: "picked", count: 15 }
   ]
 };

@@ -1,6 +1,7 @@
 import { Order } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Clock, Phone, User } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -43,9 +44,7 @@ export function OrderCard({ order, onStatusUpdate, showActions = false }: OrderC
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">Order #{order.id}</CardTitle>
-          <Badge className={getStatusColor(order.status)}>
-            {getStatusText(order.status)}
-          </Badge>
+          <StatusBadge status={order.status} className="text-xs" />
         </div>
         <div className="flex items-center space-x-4 text-sm text-muted-foreground">
           <div className="flex items-center space-x-1">
@@ -99,7 +98,8 @@ export function OrderCard({ order, onStatusUpdate, showActions = false }: OrderC
                 <SelectContent>
                   <SelectItem value="queued">Queued</SelectItem>
                   <SelectItem value="preparing">Preparing</SelectItem>
-                  <SelectItem value="ready">Ready</SelectItem>
+                  <SelectItem value="ready">Ready for Pickup</SelectItem>
+                  <SelectItem value="picked">Picked Up</SelectItem>
                 </SelectContent>
               </Select>
             </div>

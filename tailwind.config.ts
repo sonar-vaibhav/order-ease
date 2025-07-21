@@ -29,6 +29,16 @@ export default {
 					foreground: 'hsl(var(--primary-foreground))',
 					hover: 'hsl(var(--primary-hover))'
 				},
+				status: {
+					queued: 'hsl(var(--status-queued))',
+					'queued-foreground': 'hsl(var(--status-queued-foreground))',
+					preparing: 'hsl(var(--status-preparing))',
+					'preparing-foreground': 'hsl(var(--status-preparing-foreground))',
+					ready: 'hsl(var(--status-ready))',
+					'ready-foreground': 'hsl(var(--status-ready-foreground))',
+					picked: 'hsl(var(--status-picked))',
+					'picked-foreground': 'hsl(var(--status-picked-foreground))'
+				},
 				secondary: {
 					DEFAULT: 'hsl(var(--secondary))',
 					foreground: 'hsl(var(--secondary-foreground))'

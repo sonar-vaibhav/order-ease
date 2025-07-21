@@ -14,6 +14,8 @@ export interface CartItem {
   quantity: number;
 }
 
+export type OrderStatus = 'queued' | 'preparing' | 'ready' | 'picked';
+
 export interface Order {
   id: string;
   items: Array<{
@@ -23,7 +25,7 @@ export interface Order {
   customerName: string;
   customerPhone: string;
   totalAmount: number;
-  status: 'queued' | 'preparing' | 'ready';
+  status: OrderStatus;
   estimatedTime: number; // in minutes
   createdAt: Date;
   updatedAt: Date;
