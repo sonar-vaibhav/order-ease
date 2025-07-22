@@ -1,0 +1,39 @@
+const express = require('express');
+const dotenv = require('dotenv');
+const cors = require('cors');
+const connectDB = require('./src/config/db');
+const orderRoutes = require('./src/routes/orderRoutes'); // import order routes
+const dishRoutes = require('./src/routes/dishRoutes'); // import dish routes
+
+console.log('RAZORPAY_KEY_ID:', process.env.RAZORPAY_KEY_ID);
+console.log('RAZORPAY_KEY_SECRET:', process.env.RAZORPAY_KEY_SECRET);
+
+
+dotenv.config();
+
+const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Connect to MongoDB
+connectDB();
+
+app.get('/', (req, res) => {
+  res.send('OrderEase API is running');
+});
+
+app.use('/uploads', express.static('uploads')); // serve images
+app.use('/api', dishRoutes); // use dish routes under /api
+app.use('/api', orderRoutes); // use order routes under /api
+
+// Simple error handler
+app.use((err, req, res, next) => {
+  res.status(500).json({ error: err.message || 'Server error' });
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+}); 
