@@ -14,7 +14,10 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: "https://your-frontend-name.onrender.com",
+  credentials: true
+}));
 app.use(express.json());
 
 // Connect to MongoDB

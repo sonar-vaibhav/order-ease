@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/context/CartContext";
 
 export default function Menu() {
+  // Add console.log to print VITE_BACKEND_URL
+  console.log('VITE_BACKEND_URL:', import.meta.env.VITE_BACKEND_URL);
   // State to hold menu items fetched from backend
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -21,13 +23,14 @@ export default function Menu() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const BACKEND_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : '';
+  // Replace the old BACKEND_URL logic
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
   // Fetch dishes from backend API when component mounts
   useEffect(() => {
     // Why: To get real menu items from the database
     setLoading(true);
-    fetch("http://localhost:8080/api/dishes")
+    fetch(`${BACKEND_URL}/api/dishes`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to fetch menu items");
         return res.json();
@@ -40,7 +43,7 @@ export default function Menu() {
           description: dish.description || '',
           price: dish.price,
          
-          image: dish.imageUrl ? BACKEND_URL + dish.imageUrl : '',
+          image: dish.imageUrl ? `${BACKEND_URL}${dish.imageUrl}` : '',
           available: dish.available,
           preparationTime: dish.preparationTime || 15, // fallback if not present
         }));

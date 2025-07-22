@@ -44,6 +44,8 @@ function Countdown({ startTime, durationMinutes }: { startTime: string, duration
 }
 
 export default function TrackOrder() {
+  // Add console.log to print VITE_BACKEND_URL
+  console.log('VITE_BACKEND_URL:', import.meta.env.VITE_BACKEND_URL);
   const { orderId } = useParams();
   const [searchOrderId, setSearchOrderId] = useState(orderId || "");
   const [currentOrder, setCurrentOrder] = useState<any>(null);
@@ -51,12 +53,14 @@ export default function TrackOrder() {
   const [error, setError] = useState("");
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+
   const fetchOrder = async (id: string) => {
     setLoading(true);
     setError("");
     setCurrentOrder(null);
     try {
-      const res = await fetch(`/api/orders`);
+      const res = await fetch(`${BACKEND_URL}/api/orders`);
       if (!res.ok) throw new Error("Order not found");
       const orders = await res.json();
       const foundOrder = orders.find((order: any) => order.displayOrderId === id || order._id === id);

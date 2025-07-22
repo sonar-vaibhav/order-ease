@@ -26,6 +26,8 @@ interface Dish {
 }
 
 export default function AdminDashboard() {
+  // Add console.log to print VITE_BACKEND_URL
+  console.log('VITE_BACKEND_URL:', import.meta.env.VITE_BACKEND_URL);
   const navigate = useNavigate();
   const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -40,7 +42,7 @@ export default function AdminDashboard() {
   const [dishForm, setDishForm] = useState<{ name: string; price: string; image: File | null; available: boolean; description: string }>({ name: "", price: "", image: null, available: true, description: "" });
   const [dishError, setDishError] = useState("");
 
-  const BACKEND_URL = process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : '';
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function AdminDashboard() {
 
   // Helper to fetch orders from backend and update state
   const fetchOrders = () => {
-    fetch("/api/orders")
+    fetch(`${BACKEND_URL}/api/orders`)
       .then(res => res.json())
       .then(data => {
         // Map backend orders to frontend Order type
@@ -110,7 +112,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab !== "dishes") return;
     setLoadingDishes(true);
-    fetch("/api/dishes")
+    fetch(`${BACKEND_URL}/api/dishes`)
       .then(res => res.json())
       .then(data => setDishes(data))
       .catch(() => setDishes([]))
@@ -171,12 +173,12 @@ export default function AdminDashboard() {
     try {
       let res;
       if (editingDish) {
-        res = await fetch(`/api/dishes/${editingDish._id}`, {
+        res = await fetch(`${BACKEND_URL}/api/dishes/${editingDish._id}`, {
           method: "PATCH",
           body: formData,
         });
       } else {
-        res = await fetch("/api/dishes", {
+        res = await fetch(`${BACKEND_URL}/api/dishes`, {
           method: "POST",
           body: formData,
         });
@@ -188,7 +190,7 @@ export default function AdminDashboard() {
       }
       if (!res.ok) throw new Error(data?.error || "Error");
       // Refresh list
-      fetch("/api/dishes")
+      fetch(`${BACKEND_URL}/api/dishes`)
         .then(res => res.json())
         .then(data => setDishes(data));
       closeDishModal();
@@ -200,7 +202,7 @@ export default function AdminDashboard() {
   // Delete dish
   const handleDeleteDish = async (id: string) => {
     if (!window.confirm("Delete this dish?")) return;
-    const res = await fetch(`/api/dishes/${id}`, { method: "DELETE" });
+    const res = await fetch(`${BACKEND_URL}/api/dishes/${id}`, { method: "DELETE" });
     const contentType = res.headers.get('content-type');
     let data = null;
     if (contentType && contentType.includes('application/json')) {
@@ -215,7 +217,7 @@ export default function AdminDashboard() {
 
   const handleStatusUpdate = async (orderId: string, newStatus: Order['status']) => {
     try {
-      const res = await fetch(`/api/orders/${orderId}`, {
+      const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -236,7 +238,7 @@ export default function AdminDashboard() {
 
   const handleTimeRequiredUpdate = async (orderId: string, timeRequired: number | null) => {
     try {
-      const res = await fetch(`/api/orders/${orderId}`, {
+      const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeRequired }),
@@ -453,7 +455,7 @@ export default function AdminDashboard() {
                 {dishes.map(dish => (
                   <Card key={dish._id} className="relative group">
                     {dish.imageUrl && (
-                      <img src={BACKEND_URL + dish.imageUrl} alt={dish.name} className="w-full h-40 object-cover rounded-t-lg" />
+                      <img src={`${BACKEND_URL}${dish.imageUrl}`} alt={dish.name} className="w-full h-40 object-cover rounded-t-lg" />
                     )}
                     <CardHeader className="pb-2">
                       <CardTitle className="text-lg line-clamp-1">{dish.name}</CardTitle>
@@ -506,7 +508,7 @@ export default function AdminDashboard() {
                         <Label htmlFor="dish-image">Image</Label>
                         <Input id="dish-image" type="file" name="image" accept="image/*" onChange={handleDishFormChange} />
                         {editingDish && editingDish.imageUrl && (
-                          <img src={BACKEND_URL + editingDish.imageUrl} alt="Current" className="w-24 h-24 object-cover mt-2 rounded border" />
+                          <img src={`${BACKEND_URL}${editingDish.imageUrl}`} alt="Current" className="w-24 h-24 object-cover mt-2 rounded border" />
                         )}
                       </div>
                       <div className="flex items-center gap-2">

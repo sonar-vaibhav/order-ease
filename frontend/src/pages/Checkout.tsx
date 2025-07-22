@@ -27,6 +27,7 @@ export default function Checkout() {
   
   const { cartItems, customerInfo, total } = location.state || {};
   const [isProcessing, setIsProcessing] = useState(false);
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
   // Redirect if no cart data
   if (!cartItems || !customerInfo) {
@@ -44,7 +45,7 @@ export default function Checkout() {
     }
     try {
       // 1. Create Razorpay order on backend
-      const orderRes = await fetch('http://localhost:5000/api/create-razorpay-order', {
+      const orderRes = await fetch(`${BACKEND_URL}/api/create-razorpay-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: total, currency: 'INR' })
@@ -62,7 +63,7 @@ export default function Checkout() {
         order_id: orderData.id,
         handler: async function (response) {
           // 3. On payment success, save order to backend
-          const saveRes = await fetch('http://localhost:5000/api/orders', {
+          const saveRes = await fetch(`${BACKEND_URL}/api/orders`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

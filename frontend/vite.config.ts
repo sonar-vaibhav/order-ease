@@ -9,8 +9,9 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     proxy: {
-      '/api': 'http://localhost:5000',
-      '/uploads': 'http://localhost:5000'
+      // Use VITE_BACKEND_URL for proxy in development
+      '/api': process.env.VITE_BACKEND_URL || 'http://localhost:5000',
+      '/uploads': process.env.VITE_BACKEND_URL || 'http://localhost:5000'
     }
   },
   plugins: [
