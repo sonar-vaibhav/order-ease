@@ -18,7 +18,7 @@ export function Navbar({ cartItemsCount = 0, isAdmin = false, onLogout }: Navbar
       <div className="container flex h-16 items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center space-x-2">
-          <Utensils className="h-8 w-8 text-primary" />
+          <Utensils className="h-6 w-6 text-primary" />
           <span className="font-bold text-xl">OrderEase</span>
         </Link>
 
