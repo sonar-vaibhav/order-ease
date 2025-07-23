@@ -39,6 +39,9 @@ const Index = () => {
         <div>
           <div><b>Username:</b> admin</div>
           <div><b>Password:</b> admin123</div>
+          <div className="mt-2">
+            <Link to="/admin" className="text-primary underline hover:text-secondary transition-colors">Go to Admin Panel</Link>
+          </div>
         </div>
       ),
       duration: 10000 // 10 seconds
