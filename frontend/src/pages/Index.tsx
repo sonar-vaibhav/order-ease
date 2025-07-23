@@ -4,8 +4,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/ui/navbar";
 import { ChefHat, Clock, Star, Truck } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useEffect } from "react";
 
 const Index = () => {
+  const { toast } = useToast();
   const features = [
     {
       icon: <ChefHat className="w-8 h-8" />,
@@ -28,6 +31,19 @@ const Index = () => {
       description: "Simple ordering system with real-time order tracking."
     }
   ];
+
+  useEffect(() => {
+    toast({
+      title: "Admin Login (for testing)",
+      description: (
+        <div>
+          <div><b>Username:</b> admin</div>
+          <div><b>Password:</b> admin123</div>
+        </div>
+      ),
+      duration: 10000 // 10 seconds
+    });
+  }, [toast]);
 
   return (
     <div className="min-h-screen bg-background">

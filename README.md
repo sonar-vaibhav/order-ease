@@ -23,7 +23,7 @@
 
 ### 👨‍🍳 Customer Interface
 - Browse menu and add items to cart
-- Place orders with or without login
+- Place orders without login
 - Pay via Razorpay (test mode)
 - Receive unique Order ID
 - Track order status in real-time (Queued → Preparing → Ready → Picked)
@@ -42,9 +42,6 @@
 - **Backend:** Node.js, Express.js
 - **Database:** MongoDB (MongoDB Atlas)
 - **Payment Gateway:** Razorpay API (Test Mode)
-- **Routing:** React Router DOM
-- **State Management:** React Context API
-- **Notifications:** Sonner, Toaster
 - **Deployment:** Render (Frontend + Backend)
 
 ---
