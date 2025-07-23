@@ -40,7 +40,7 @@ const Index = () => {
           <div><b>Username:</b> admin</div>
           <div><b>Password:</b> admin123</div>
           <div className="mt-2">
-            <Link to="/admin" className="text-primary underline hover:text-secondary transition-colors">Go to Admin Panel</Link>
+            <a href="/admin/login" className="text-primary underline hover:text-secondary transition-colors">Go to Admin Panel</a>
           </div>
         </div>
       ),
