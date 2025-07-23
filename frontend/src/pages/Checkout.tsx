@@ -82,7 +82,7 @@ export default function Checkout() {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
               },
-              status: 'pending',
+              status: 'queued',
             })
           });
           const savedOrder = await saveRes.json();
