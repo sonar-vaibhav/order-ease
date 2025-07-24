@@ -42,8 +42,11 @@ export default function Menu() {
           name: dish.name,
           description: dish.description || '',
           price: dish.price,
-         
-          image: dish.imageUrl ? `${BACKEND_URL}${dish.imageUrl}` : '',
+          image: dish.imageUrl
+            ? dish.imageUrl.startsWith('http')
+              ? dish.imageUrl
+              : `${BACKEND_URL}${dish.imageUrl}`
+            : '',
           available: dish.available,
           preparationTime: dish.preparationTime || 15, // fallback if not present
         }));

@@ -455,7 +455,7 @@ export default function AdminDashboard() {
                 {dishes.map(dish => (
                   <Card key={dish._id} className="relative group">
                     {dish.imageUrl && (
-                      <img src={`${BACKEND_URL}${dish.imageUrl}`} alt={dish.name} className="w-full h-40 object-cover rounded-t-lg" />
+                      <img src={dish.imageUrl.startsWith('http') ? dish.imageUrl : `${BACKEND_URL}${dish.imageUrl}`} alt={dish.name} className="w-full h-40 object-cover rounded-t-lg" />
                     )}
                     <CardHeader className="pb-2">
                       <CardTitle className="text-lg line-clamp-1">{dish.name}</CardTitle>
@@ -508,7 +508,7 @@ export default function AdminDashboard() {
                         <Label htmlFor="dish-image">Image</Label>
                         <Input id="dish-image" type="file" name="image" accept="image/*" onChange={handleDishFormChange} />
                         {editingDish && editingDish.imageUrl && (
-                          <img src={`${BACKEND_URL}${editingDish.imageUrl}`} alt="Current" className="w-24 h-24 object-cover mt-2 rounded border" />
+                          <img src={editingDish.imageUrl.startsWith('http') ? editingDish.imageUrl : `${BACKEND_URL}${editingDish.imageUrl}`} alt="Current" className="w-24 h-24 object-cover mt-2 rounded border" />
                         )}
                       </div>
                       <div className="flex items-center gap-2">
