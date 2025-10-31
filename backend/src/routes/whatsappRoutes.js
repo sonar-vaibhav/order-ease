@@ -40,6 +40,68 @@ router.get('/debug-env', (req, res) => {
   });
 });
 
+// Simple message test endpoint
+router.post('/simple-message-test', async (req, res) => {
+  try {
+    console.log('🧪 Simple message test started');
+    
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+    const testPhone = '917498780950';
+    
+    console.log('📱 Phone Number ID:', phoneNumberId);
+    console.log('🔑 Access Token Length:', accessToken?.length);
+    console.log('📞 Test Phone:', testPhone);
+    
+    if (!phoneNumberId || !accessToken) {
+      return res.status(400).json({ 
+        error: 'Missing WhatsApp credentials',
+        hasPhoneId: !!phoneNumberId,
+        hasToken: !!accessToken
+      });
+    }
+
+    const axios = require('axios');
+    const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
+    
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: testPhone,
+      type: 'text',
+      text: {
+        body: '🧪 Simple test from Render server! If you receive this, everything is working! 🎉'
+      }
+    };
+
+    console.log('📤 Sending to URL:', url);
+    console.log('📦 Payload:', JSON.stringify(payload, null, 2));
+
+    const response = await axios.post(url, payload, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('✅ Message sent successfully:', response.data);
+    
+    res.json({
+      success: true,
+      message: 'Message sent successfully',
+      response: response.data
+    });
+
+  } catch (error) {
+    console.error('❌ Error in simple message test:', error.response?.data || error.message);
+    
+    res.status(500).json({
+      error: 'Failed to send message',
+      details: error.response?.data || error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // Test endpoint to send a message (for development/testing)
 router.post('/send-test-message', async (req, res) => {
   try {
