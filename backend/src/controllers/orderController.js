@@ -73,7 +73,8 @@ exports.updateOrderStatus = async (req, res) => {
 // Get all orders
 exports.getAllOrders = async (req, res) => {
   try {
-    const orders = await Order.find();
+    // Sort by createdAt in descending order (newest first)
+    const orders = await Order.find().sort({ createdAt: -1 });
     res.json(orders);
   } catch (err) {
     res.status(500).json({ error: err.message });
