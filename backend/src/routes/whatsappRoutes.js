@@ -27,6 +27,19 @@ router.get('/health', (req, res) => {
   });
 });
 
+// Debug endpoint to check environment variables
+router.get('/debug-env', (req, res) => {
+  res.json({
+    hasAccessToken: !!process.env.WHATSAPP_ACCESS_TOKEN,
+    hasPhoneNumberId: !!process.env.WHATSAPP_PHONE_NUMBER_ID,
+    hasVerifyToken: !!process.env.WHATSAPP_VERIFY_TOKEN,
+    accessTokenLength: process.env.WHATSAPP_ACCESS_TOKEN?.length || 0,
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN,
+    backendUrl: process.env.BACKEND_URL
+  });
+});
+
 // Test endpoint to send a message (for development/testing)
 router.post('/send-test-message', async (req, res) => {
   try {
