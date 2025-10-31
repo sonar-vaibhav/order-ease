@@ -50,4 +50,69 @@ router.get('/health', (req, res) => {
   });
 });
 
+// Payment success callback for WhatsApp orders
+router.get('/payment-success', async (req, res) => {
+  try {
+    const { razorpay_payment_id, razorpay_payment_link_id } = req.query;
+
+    if (!razorpay_payment_id || !razorpay_payment_link_id) {
+      return res.redirect('https://order-ease-i1t7.onrender.com/track?error=payment_info_missing');
+    }
+
+    // Find the WhatsApp order
+    const WhatsAppOrder = require('../models/WhatsAppOrder');
+    const whatsappOrder = await WhatsAppOrder.findOne({
+      _id: req.query.whatsapp_order_id || null
+    });
+
+    if (!whatsappOrder) {
+      // Try to find by payment link notes
+      try {
+        const Razorpay = require('razorpay');
+        const razorpay = new Razorpay({
+          key_id: process.env.RAZORPAY_KEY_ID,
+          key_secret: process.env.RAZORPAY_KEY_SECRET,
+        });
+
+        const paymentLink = await razorpay.paymentLink.fetch(razorpay_payment_link_id);
+        if (paymentLink && paymentLink.notes && paymentLink.notes.whatsapp_order_id) {
+          const foundOrder = await WhatsAppOrder.findById(paymentLink.notes.whatsapp_order_id);
+          if (foundOrder) {
+            // Update order with payment details
+            foundOrder.razorpayPaymentId = razorpay_payment_id;
+            foundOrder.status = 'paid';
+            await foundOrder.save();
+
+            // Create main order
+            const SimpleOrderBot = require('../whatsapp/simpleOrderBot');
+            await SimpleOrderBot.createMainOrder(foundOrder);
+
+            return res.redirect(`https://order-ease-i1t7.onrender.com/track?payment_success=true&source=whatsapp`);
+          }
+        }
+      } catch (error) {
+        console.error('Error processing payment:', error);
+      }
+
+      return res.redirect('https://order-ease-i1t7.onrender.com/track?error=order_not_found');
+    }
+
+    // Update order with payment details
+    whatsappOrder.razorpayPaymentId = razorpay_payment_id;
+    whatsappOrder.status = 'paid';
+    await whatsappOrder.save();
+
+    // Create main order
+    const SimpleOrderBot = require('../whatsapp/simpleOrderBot');
+    await SimpleOrderBot.createMainOrder(whatsappOrder);
+
+    // Redirect to track page
+    return res.redirect(`https://order-ease-i1t7.onrender.com/track?payment_success=true&source=whatsapp`);
+
+  } catch (error) {
+    console.error('Error handling payment success:', error);
+    return res.redirect('https://order-ease-i1t7.onrender.com/track?error=processing_error');
+  }
+});
+
 module.exports = router;

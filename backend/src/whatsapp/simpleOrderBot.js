@@ -329,24 +329,86 @@ class SimpleOrderBot {
       whatsappOrder.status = 'pending_payment';
       await whatsappOrder.save();
 
-      // Create payment link (simplified)
-      const paymentMessage = `✅ *Details Confirmed!*\n\n` +
-        `👤 ${name}\n` +
-        `📞 ${phone}\n` +
-        `📍 ${address}\n\n` +
-        `💰 Total: ₹${whatsappOrder.totalAmount}\n\n` +
-        `💳 *Payment Link:*\n` +
-        `[Payment will be integrated here]\n\n` +
-        `For now, your order is confirmed! 🎉`;
+      // Create Razorpay payment link
+      try {
+        const paymentLink = await SimpleOrderBot.createPaymentLink(
+          whatsappOrder.totalAmount,
+          whatsappOrder._id.toString()
+        );
 
-      await WhatsAppService.sendMessage(phoneNumber, paymentMessage);
+        const paymentMessage = `✅ *Details Confirmed!*\n\n` +
+          `👤 ${name}\n` +
+          `📞 ${phone}\n` +
+          `📍 ${address}\n\n` +
+          `💰 Total: ₹${whatsappOrder.totalAmount}\n\n` +
+          `💳 *Complete Payment:*\n${paymentLink}\n\n` +
+          `⚠️ Test mode - Use test card details\n\n` +
+          `After payment, you'll get your Order ID! 🎉`;
 
-      // Create actual order in system
-      await SimpleOrderBot.createMainOrder(whatsappOrder);
+        await WhatsAppService.sendMessage(phoneNumber, paymentMessage);
+
+      } catch (error) {
+        console.error('Error creating payment link:', error);
+        
+        // Fallback - create order without payment for now
+        await WhatsAppService.sendMessage(
+          phoneNumber,
+          `✅ *Details Confirmed!*\n\n` +
+          `👤 ${name}\n` +
+          `📞 ${phone}\n` +
+          `📍 ${address}\n\n` +
+          `💰 Total: ₹${whatsappOrder.totalAmount}\n\n` +
+          `⚠️ Payment system temporarily unavailable.\n` +
+          `Your order is confirmed! 🎉`
+        );
+
+        // Create order anyway
+        await SimpleOrderBot.createMainOrder(whatsappOrder);
+      }
 
     } catch (error) {
       console.error('Error handling customer details:', error);
       await WhatsAppService.sendMessage(phoneNumber, '❌ Error processing details. Please try again.');
+    }
+  }
+
+  // Create Razorpay payment link
+  static async createPaymentLink(amount, orderId) {
+    try {
+      const Razorpay = require('razorpay');
+      const razorpay = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET,
+      });
+
+      const paymentLink = await razorpay.paymentLink.create({
+        amount: amount * 100, // amount in paise
+        currency: 'INR',
+        accept_partial: false,
+        description: `OrderEase - Order Payment`,
+        customer: {
+          name: 'OrderEase Customer',
+        },
+        notify: {
+          sms: false,
+          email: false,
+          whatsapp: false
+        },
+        reminder_enable: false,
+        notes: {
+          whatsapp_order_id: orderId,
+          source: 'whatsapp'
+        },
+        callback_url: `${process.env.BACKEND_URL}/api/whatsapp/payment-success`,
+        callback_method: 'get'
+      });
+
+      console.log('✅ Payment link created:', paymentLink.short_url);
+      return paymentLink.short_url;
+
+    } catch (error) {
+      console.error('❌ Error creating payment link:', error);
+      throw error;
     }
   }
 
@@ -389,12 +451,23 @@ class SimpleOrderBot {
       whatsappOrder.status = 'completed';
       await whatsappOrder.save();
 
-      // Send confirmation
-      const confirmMessage = `🎉 *Order Placed Successfully!*\n\n` +
-        `📋 *Order ID:* ${displayOrderId}\n\n` +
-        `Your order is now being prepared!\n` +
-        `Track anytime by sending: ${displayOrderId}\n\n` +
-        `Thank you for choosing OrderEase! 😊`;
+      // Send confirmation with order details
+      const orderTime = moment().tz('Asia/Kolkata').format('hh:mm A');
+      
+      let confirmMessage = `🎉 *Payment Successful!*\n\n`;
+      confirmMessage += `✅ Order placed at ${orderTime}\n`;
+      confirmMessage += `📋 *Order ID:* ${displayOrderId}\n\n`;
+      
+      confirmMessage += `🍽️ *Your Order:*\n`;
+      whatsappOrder.items.forEach(item => {
+        confirmMessage += `• ${item.name} × ${item.quantity}\n`;
+      });
+      
+      confirmMessage += `\n💰 Total: ₹${whatsappOrder.totalAmount}\n\n`;
+      confirmMessage += `👨‍🍳 Your order is being prepared\n`;
+      confirmMessage += `⏱️ Estimated time: 15-30 minutes\n\n`;
+      confirmMessage += `🔍 *Track anytime:* Send ${displayOrderId}\n\n`;
+      confirmMessage += `Thank you for choosing OrderEase! 😊`;
 
       await WhatsAppService.sendMessage(whatsappOrder.phoneNumber, confirmMessage);
 
