@@ -1,4 +1,4 @@
-import { ShoppingCart, Clock, LogOut, User } from "lucide-react";
+import { ShoppingCart, Clock, LogOut, User, Utensils } from "lucide-react";
 import { Button } from "./button";
 import { Badge } from "./badge";
 import { Link, useLocation } from "react-router-dom";
@@ -14,13 +14,11 @@ export function Navbar({ cartItemsCount = 0, isAdmin = false, onLogout }: Navbar
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-lg shadow-lg supports-[backdrop-filter]:bg-background/60 transition-all">
       <div className="container flex h-16 items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center space-x-2">
-          <div className="h-8 w-8 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">OE</span>
-          </div>
+          <Utensils className="h-6 w-6 text-primary" />
           <span className="font-bold text-xl">OrderEase</span>
         </Link>
 
