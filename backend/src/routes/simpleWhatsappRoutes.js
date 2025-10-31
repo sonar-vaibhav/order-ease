@@ -1,17 +1,44 @@
 const express = require('express');
 const router = express.Router();
-const SimpleWhatsAppWebhook = require('../whatsapp/simpleWebhook');
+const SimpleWhatsAppController = require('../whatsapp/simpleController');
 
 // WhatsApp webhook verification (GET request)
-// This endpoint handles Meta's webhook verification
-router.get('/webhook', SimpleWhatsAppWebhook.verifyWebhook);
+router.get('/webhook', SimpleWhatsAppController.verifyWebhook);
 
 // WhatsApp webhook for incoming messages (POST request)
-// This endpoint receives all incoming WhatsApp messages
-router.post('/webhook', SimpleWhatsAppWebhook.handleIncomingMessage);
+router.post('/webhook', SimpleWhatsAppController.handleIncomingMessage);
 
 // Test endpoint to send messages manually
-router.post('/send-test-message', SimpleWhatsAppWebhook.sendTestMessage);
+router.post('/send-test-message', async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    
+    if (!to || !message) {
+      return res.status(400).json({ 
+        error: 'Phone number and message are required' 
+      });
+    }
+
+    const WhatsAppService = require('../whatsapp/whatsappService');
+    const success = await WhatsAppService.sendMessage(to, message);
+    
+    if (success) {
+      res.json({ 
+        success: true, 
+        message: 'Test message sent successfully' 
+      });
+    } else {
+      res.status(500).json({ 
+        error: 'Failed to send test message' 
+      });
+    }
+  } catch (error) {
+    console.error('Error sending test message:', error);
+    res.status(500).json({ 
+      error: 'Internal server error' 
+    });
+  }
+});
 
 // Health check endpoint
 router.get('/health', (req, res) => {
