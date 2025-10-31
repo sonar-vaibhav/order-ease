@@ -117,4 +117,43 @@ router.post('/admin/send-message', WhatsAppAdminController.sendManualMessage);
 router.get('/admin/messages/:phoneNumber', WhatsAppAdminController.getMessageHistory);
 router.get('/admin/conversations', WhatsAppAdminController.getActiveConversations);
 
+// Gemini testing endpoints
+router.get('/test-gemini', async (req, res) => {
+  try {
+    const GeminiService = require('../whatsapp/geminiService');
+    const geminiService = new GeminiService();
+    
+    const result = await geminiService.testConnection();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/test-order-parsing', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const Dish = require('../models/Dish');
+    const GeminiService = require('../whatsapp/geminiService');
+    
+    const dishes = await Dish.find({ available: true });
+    const geminiService = new GeminiService();
+    
+    const result = await geminiService.parseOrder(message, dishes);
+    
+    res.json({
+      success: true,
+      message: message,
+      parsedItems: result,
+      availableDishes: dishes.map(d => ({ name: d.name, price: d.price }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

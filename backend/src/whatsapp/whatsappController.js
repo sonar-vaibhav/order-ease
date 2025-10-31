@@ -1,4 +1,5 @@
 const WhatsAppService = require('./whatsappService');
+const GeminiService = require('./geminiService');
 const Order = require('../models/Order');
 const Dish = require('../models/Dish');
 const WhatsAppOrder = require('../models/WhatsAppOrder');
@@ -264,49 +265,21 @@ class WhatsAppController {
     }
   }
 
-  // Parse order items from message text
+  // Parse order items from message text using Gemini AI + fallback
   static async parseOrderFromMessage(messageBody) {
     try {
       const dishes = await Dish.find({ available: true });
-      const orderItems = [];
-
-      // Simple parsing logic - look for patterns like "2 pizza", "1 coke", etc.
-      const words = messageBody.toLowerCase().split(/\s+/);
       
-      for (let i = 0; i < words.length; i++) {
-        const word = words[i];
-        
-        // Check if current word is a number
-        const quantity = parseInt(word);
-        if (isNaN(quantity) || quantity <= 0) continue;
-        
-        // Look for dish names in the next few words
-        for (let j = i + 1; j < Math.min(i + 4, words.length); j++) {
-          const potentialDishName = words.slice(i + 1, j + 1).join(' ');
-          
-          // Find matching dish
-          const matchingDish = dishes.find(dish => 
-            dish.name.toLowerCase().includes(potentialDishName) ||
-            potentialDishName.includes(dish.name.toLowerCase())
-          );
-          
-          if (matchingDish) {
-            // Check if this item is already in the order
-            const existingItem = orderItems.find(item => item.name === matchingDish.name);
-            if (existingItem) {
-              existingItem.quantity += quantity;
-            } else {
-              orderItems.push({
-                name: matchingDish.name,
-                quantity: quantity,
-                price: matchingDish.price
-              });
-            }
-            break;
-          }
-        }
+      if (dishes.length === 0) {
+        console.log('⚠️ No dishes available in database');
+        return [];
       }
 
+      // Use Gemini service for intelligent parsing
+      const geminiService = new GeminiService();
+      const orderItems = await geminiService.parseOrder(messageBody, dishes);
+
+      console.log(`📝 Parsed ${orderItems.length} items from: "${messageBody}"`);
       return orderItems;
     } catch (error) {
       console.error('Error parsing order from message:', error);

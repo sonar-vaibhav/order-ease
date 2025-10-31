@@ -33,8 +33,8 @@ app.use('/uploads', express.static('uploads')); // serve images
 app.use('/api', dishRoutes); // use dish routes under /api
 app.use('/api', orderRoutes); // use order routes under /api
 // Choose one of these - comment out the other
-app.use('/api/whatsapp', simpleWhatsappRoutes); // use simple whatsapp routes (for initial setup)
-// app.use('/api/whatsapp', whatsappRoutes); // use full whatsapp routes (for complete features)
+// app.use('/api/whatsapp', simpleWhatsappRoutes); // use simple whatsapp routes (for initial setup)
+app.use('/api/whatsapp', whatsappRoutes); // use full whatsapp routes (for complete features)
 
 // Simple error handler
 app.use((err, req, res, next) => {
