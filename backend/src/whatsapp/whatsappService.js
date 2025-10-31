@@ -246,13 +246,26 @@ class WhatsAppService {
   // Send payment success message
   static async sendPaymentSuccess(to, orderDetails) {
     try {
+      const moment = require('moment-timezone');
+      const orderTime = moment().tz('Asia/Kolkata').format('hh:mm A');
+      
       let message = `🎉 *Payment Successful!*\n\n`;
-      message += `✅ Your order has been placed successfully.\n`;
-      message += `📋 Order ID: ${orderDetails.displayOrderId}\n\n`;
-      message += `👨‍🍳 Your order is now being prepared.\n`;
-      message += `⏱️ Estimated preparation time: 15-30 minutes\n\n`;
-      message += `🔍 Track your order anytime by sending: *${orderDetails.displayOrderId}*\n\n`;
-      message += `Thank you for choosing OrderEase! 😊`;
+      message += `✅ Order placed at ${orderTime}\n`;
+      message += `📋 *Order ID:* ${orderDetails.displayOrderId}\n\n`;
+      
+      message += `🍽️ *Your Order:*\n`;
+      orderDetails.items.forEach(item => {
+        message += `• ${item.name} × ${item.quantity}\n`;
+      });
+      
+      const totalAmount = orderDetails.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      message += `\n💰 Total: ₹${totalAmount}\n\n`;
+      
+      message += `👨‍🍳 Your order is being prepared\n`;
+      message += `⏱️ Estimated time: 15-30 minutes\n\n`;
+      message += `🔍 *Track anytime:* Send ${orderDetails.displayOrderId}\n\n`;
+      message += `Thank you for choosing OrderEase! 😊\n\n`;
+      message += `💡 Type *quit* to start a new order`;
 
       return await WhatsAppService.sendMessage(to, message);
     } catch (error) {

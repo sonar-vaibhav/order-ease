@@ -17,4 +17,7 @@ router.get('/orders', orderController.getAllOrders);
 // Create Razorpay order
 router.post('/create-razorpay-order', orderController.createRazorpayOrder);
 
+// Handle payment success callback for website orders
+router.get('/payment-success', orderController.handlePaymentSuccess);
+
 module.exports = router; 

@@ -98,6 +98,19 @@ class RazorpayWebhookHandler {
       whatsappOrder.razorpayPaymentId = payment.id;
       await whatsappOrder.save();
 
+      // Update chat session to completed state
+      const ChatSession = require('../models/ChatSession');
+      const session = await ChatSession.findOne({ 
+        phoneNumber: whatsappOrder.phoneNumber, 
+        isActive: true 
+      });
+      
+      if (session) {
+        session.updateStage('order_placed');
+        session.context.completedOrderId = orderData.displayOrderId;
+        await session.save();
+      }
+
       // Send confirmation message to customer
       await WhatsAppService.sendPaymentSuccess(whatsappOrder.phoneNumber, orderData);
 
@@ -215,14 +228,8 @@ class RazorpayWebhookHandler {
       const { razorpay_payment_id, razorpay_payment_link_id } = req.query;
 
       if (!razorpay_payment_id || !razorpay_payment_link_id) {
-        return res.status(400).send(`
-          <html>
-            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-              <h2 style="color: #e74c3c;">❌ Payment Information Missing</h2>
-              <p>Required payment information is missing. Please contact support.</p>
-            </body>
-          </html>
-        `);
+        // Redirect to track page with error
+        return res.redirect('https://order-ease-i1t7.onrender.com/track?error=payment_info_missing');
       }
 
       // Find the WhatsApp order
@@ -231,57 +238,25 @@ class RazorpayWebhookHandler {
       });
 
       if (!whatsappOrder) {
-        return res.status(404).send(`
-          <html>
-            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-              <h2 style="color: #e74c3c;">❌ Order Not Found</h2>
-              <p>We couldn't find your order. Please contact support with payment ID: ${razorpay_payment_id}</p>
-            </body>
-          </html>
-        `);
+        // Redirect to track page with error
+        return res.redirect(`https://order-ease-i1t7.onrender.com/track?error=order_not_found&payment_id=${razorpay_payment_id}`);
       }
 
       // Get the main order
       const mainOrder = await Order.findById(whatsappOrder.mainOrderId);
 
-      return res.send(`
-        <html>
-          <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-            <div style="max-width: 600px; margin: 0 auto; background: #f8f9fa; padding: 30px; border-radius: 10px;">
-              <h2 style="color: #27ae60;">✅ Payment Successful!</h2>
-              <p style="font-size: 18px; margin: 20px 0;">Thank you for your payment!</p>
-              
-              <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3>Order Details</h3>
-                <p><strong>Order ID:</strong> ${mainOrder?.displayOrderId || 'Processing...'}</p>
-                <p><strong>Payment ID:</strong> ${razorpay_payment_id}</p>
-                <p><strong>Amount:</strong> ₹${whatsappOrder.totalAmount}</p>
-                <p><strong>Status:</strong> Order Placed Successfully</p>
-              </div>
-              
-              <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p><strong>📱 WhatsApp Confirmation Sent!</strong></p>
-                <p>You will receive order updates on WhatsApp.</p>
-                <p>Track your order by sending: <strong>${mainOrder?.displayOrderId || 'Your Order ID'}</strong></p>
-              </div>
-              
-              <p style="color: #666; font-size: 14px; margin-top: 30px;">
-                You can close this window now.
-              </p>
-            </div>
-          </body>
-        </html>
-      `);
+      if (!mainOrder) {
+        // Redirect to track page with error
+        return res.redirect('https://order-ease-i1t7.onrender.com/track?error=order_processing');
+      }
+
+      // Successful payment - redirect to track page with order ID
+      return res.redirect(`https://order-ease-i1t7.onrender.com/track?order_id=${mainOrder.displayOrderId}&payment_success=true&source=whatsapp`);
+
     } catch (error) {
       console.error('Error handling payment success callback:', error);
-      return res.status(500).send(`
-        <html>
-          <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-            <h2 style="color: #e74c3c;">❌ Error Processing Payment</h2>
-            <p>There was an error processing your payment confirmation. Please contact support.</p>
-          </body>
-        </html>
-      `);
+      // Redirect to track page with error
+      return res.redirect('https://order-ease-i1t7.onrender.com/track?error=processing_error');
     }
   }
 }

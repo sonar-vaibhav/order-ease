@@ -242,4 +242,47 @@ router.post('/test-order-parsing', async (req, res) => {
   }
 });
 
+// Session management endpoints
+router.post('/admin/clear-session', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    const ChatSession = require('../models/ChatSession');
+    const session = await ChatSession.clearSession(phoneNumber);
+    
+    res.json({
+      success: true,
+      message: `Session cleared for ${phoneNumber}`,
+      session: session ? session.getOrderSummary() : null
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/admin/sessions', async (req, res) => {
+  try {
+    const ChatSession = require('../models/ChatSession');
+    const sessions = await ChatSession.find({ isActive: true })
+      .sort({ lastActivity: -1 })
+      .limit(50);
+
+    res.json({
+      success: true,
+      sessions: sessions.map(session => ({
+        phoneNumber: session.phoneNumber,
+        stage: session.stage,
+        lastActivity: session.lastActivity,
+        pendingOrder: session.context.pendingOrder,
+        messageCount: session.context.messageHistory?.length || 0
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

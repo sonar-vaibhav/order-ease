@@ -6,8 +6,8 @@ class GeminiService {
     this.baseURL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
   }
 
-  // Parse order using Gemini AI
-  async parseOrderFromMessage(userMessage, availableDishes) {
+  // Parse order using Gemini AI with natural language understanding
+  async parseOrderFromMessage(userMessage, availableDishes, conversationContext = '') {
     try {
       if (!this.apiKey) {
         console.log('⚠️ Gemini API key not found, falling back to simple parsing');
@@ -20,27 +20,36 @@ class GeminiService {
       ).join('\n');
 
       const prompt = `
-You are an AI assistant for OrderEase restaurant. Parse the customer's order message and extract dish names and quantities.
+You are an AI assistant for OrderEase restaurant. Parse the customer's food order message naturally.
 
 Available dishes:
 ${dishList}
 
+${conversationContext ? `Previous conversation context: ${conversationContext}` : ''}
+
 Customer message: "${userMessage}"
 
-Rules:
-1. Only extract dishes that exist in the available dishes list
-2. Extract quantities (numbers) associated with each dish
-3. Match dish names even if customer uses variations (e.g., "pizza" matches "Pizza", "coke" matches "Coke")
-4. If no quantity is specified, assume 1
-5. Ignore words that don't relate to food orders
+Parse this message and extract food items with quantities. Be flexible with language:
+- "2 pizza 1 coke" = 2 Pizza, 1 Coke
+- "pizza and coke" = 1 Pizza, 1 Coke  
+- "I want two burgers" = 2 Burger
+- "give me pizza" = 1 Pizza
+- "one more pizza" = 1 Pizza (additional)
 
-Return ONLY a JSON array in this exact format:
+Rules:
+1. Match dish names flexibly (pizza = Pizza, burger = Burger, etc.)
+2. Extract quantities from numbers or words (two = 2, one = 1)
+3. If no quantity specified, assume 1
+4. Only include dishes from the available menu
+5. Ignore non-food words
+
+Return ONLY a JSON array:
 [
   {"name": "Pizza", "quantity": 2},
   {"name": "Coke", "quantity": 1}
 ]
 
-If no valid dishes are found, return: []
+If no valid dishes found, return: []
 `;
 
       const response = await axios.post(
@@ -60,10 +69,10 @@ If no valid dishes are found, return: []
       );
 
       const generatedText = response.data.candidates[0].content.parts[0].text;
-      console.log('🤖 Gemini response:', generatedText);
+      console.log('🤖 Gemini order parsing:', generatedText);
 
       // Extract JSON from response
-      const jsonMatch = generatedText.match(/\[[\s\S]*\]/);
+      const jsonMatch = generatedText.match(/\[[\s\S]*?\]/);
       if (!jsonMatch) {
         console.log('⚠️ No valid JSON found in Gemini response');
         return null;
@@ -94,6 +103,105 @@ If no valid dishes are found, return: []
       console.error('❌ Gemini API error:', error.response?.data || error.message);
       return null;
     }
+  }
+
+  // Parse customer details with flexible format
+  async parseCustomerDetails(userMessage) {
+    try {
+      if (!this.apiKey) {
+        return this.simpleParseCustomerDetails(userMessage);
+      }
+
+      const prompt = `
+Parse customer details from this message. Be flexible with format:
+
+Message: "${userMessage}"
+
+Extract name, phone, and address. Handle various formats:
+- "John Doe, 9876543210, 123 Main St"
+- "John Doe 9876543210 123 Main St" 
+- "Name: John, Phone: 9876543210, Address: 123 Main St"
+- "John Doe\n9876543210\n123 Main St"
+
+Return ONLY JSON:
+{
+  "name": "John Doe",
+  "phone": "9876543210", 
+  "address": "123 Main St"
+}
+
+If any field is missing, return null for that field.
+`;
+
+      const response = await axios.post(
+        `${this.baseURL}?key=${this.apiKey}`,
+        {
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }]
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const generatedText = response.data.candidates[0].content.parts[0].text;
+      console.log('🤖 Gemini customer parsing:', generatedText);
+
+      const jsonMatch = generatedText.match(/\{[\s\S]*?\}/);
+      if (!jsonMatch) {
+        return this.simpleParseCustomerDetails(userMessage);
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      return parsed;
+
+    } catch (error) {
+      console.error('❌ Gemini customer parsing error:', error);
+      return this.simpleParseCustomerDetails(userMessage);
+    }
+  }
+
+  // Fallback simple customer details parsing
+  simpleParseCustomerDetails(message) {
+    // Try comma-separated format first
+    const commaParts = message.split(',').map(part => part.trim());
+    if (commaParts.length >= 3) {
+      return {
+        name: commaParts[0],
+        phone: commaParts[1],
+        address: commaParts.slice(2).join(', ')
+      };
+    }
+
+    // Try space-separated format
+    const words = message.trim().split(/\s+/);
+    const phoneRegex = /^\d{10,12}$/;
+    
+    let name = '';
+    let phone = '';
+    let address = '';
+    let phoneIndex = -1;
+
+    // Find phone number
+    for (let i = 0; i < words.length; i++) {
+      if (phoneRegex.test(words[i])) {
+        phone = words[i];
+        phoneIndex = i;
+        break;
+      }
+    }
+
+    if (phoneIndex > 0) {
+      name = words.slice(0, phoneIndex).join(' ');
+      address = words.slice(phoneIndex + 1).join(' ');
+    }
+
+    return { name, phone, address };
   }
 
   // Fallback simple parsing (existing logic)

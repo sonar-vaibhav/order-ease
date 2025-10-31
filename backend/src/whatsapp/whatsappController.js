@@ -3,6 +3,7 @@ const GeminiService = require('./geminiService');
 const Order = require('../models/Order');
 const Dish = require('../models/Dish');
 const WhatsAppOrder = require('../models/WhatsAppOrder');
+const ChatSession = require('../models/ChatSession');
 const moment = require('moment-timezone');
 
 class WhatsAppController {
@@ -57,43 +58,188 @@ class WhatsAppController {
     }
   }
 
-  // Process different types of messages
+  // Process different types of messages with session management
   static async processMessage(phoneNumber, messageBody, messageId) {
     try {
-      // Check if it's a tracking request
-      if (messageBody.includes('track') || messageBody.match(/^\d{8}-\d{3}$/)) {
-        await WhatsAppController.handleTrackingRequest(phoneNumber, messageBody);
+      const cleanMessage = messageBody.toLowerCase().trim();
+      
+      // Handle special commands first
+      if (cleanMessage === 'quit' || cleanMessage === 'reset' || cleanMessage === 'start over') {
+        await WhatsAppController.handleQuitCommand(phoneNumber);
         return;
       }
 
-      // Check if it's a menu request
-      if (messageBody.includes('menu') || messageBody.includes('list')) {
-        await WhatsAppController.sendMenu(phoneNumber);
+      // Handle direct order tracking (order ID format)
+      if (cleanMessage.match(/^\d{8}-\d{3}$/)) {
+        await WhatsAppController.handleTrackingRequest(phoneNumber, cleanMessage);
         return;
       }
 
-      // Check if user has a pending order waiting for details
-      const pendingOrder = await WhatsAppOrder.findPendingOrder(phoneNumber);
-      if (pendingOrder && pendingOrder.status === 'pending_details') {
-        await WhatsAppController.handleCustomerDetails(phoneNumber, messageBody);
-        return;
+      // Get or create session
+      const session = await ChatSession.findOrCreateSession(phoneNumber);
+      session.addMessage(messageBody, 'user');
+
+      console.log(`📱 ${phoneNumber} [${session.stage}]: "${messageBody}"`);
+
+      // Route based on conversation stage
+      switch (session.stage) {
+        case 'welcome':
+          await WhatsAppController.handleWelcomeStage(phoneNumber, cleanMessage, session);
+          break;
+        
+        case 'browsing':
+          await WhatsAppController.handleBrowsingStage(phoneNumber, cleanMessage, session);
+          break;
+        
+        case 'ordering':
+          await WhatsAppController.handleOrderingStage(phoneNumber, cleanMessage, session);
+          break;
+        
+        case 'confirming_order':
+          await WhatsAppController.handleOrderConfirmationStage(phoneNumber, cleanMessage, session);
+          break;
+        
+        case 'collecting_details':
+          await WhatsAppController.handleDetailsCollectionStage(phoneNumber, cleanMessage, session);
+          break;
+        
+        case 'payment_pending':
+          await WhatsAppController.handlePaymentPendingStage(phoneNumber, cleanMessage, session);
+          break;
+        
+        case 'tracking':
+          await WhatsAppController.handleTrackingStage(phoneNumber, cleanMessage, session);
+          break;
+        
+        default:
+          await WhatsAppController.handleWelcomeStage(phoneNumber, cleanMessage, session);
       }
 
-      // Check if it's an order request
-      if (messageBody.includes('order') || messageBody.includes('want')) {
-        await WhatsAppController.handleOrderRequest(phoneNumber, messageBody);
-        return;
-      }
+      await session.save();
 
-      // Default response for unrecognized messages
-      await WhatsAppController.sendDefaultResponse(phoneNumber);
     } catch (error) {
       console.error('Error processing message:', error);
       await WhatsAppService.sendMessage(
         phoneNumber,
-        'Sorry, there was an error processing your request. Please try again later.'
+        '❌ Sorry, something went wrong. Type *quit* to start fresh or try again.'
       );
     }
+  }
+
+  // Handle quit command - reset session
+  static async handleQuitCommand(phoneNumber) {
+    try {
+      await ChatSession.clearSession(phoneNumber);
+      
+      const message = `🔄 *Session Reset*\n\n` +
+        `Your conversation has been cleared. Starting fresh!\n\n` +
+        `👋 Welcome to *OrderEase*!\n\n` +
+        `🍽️ Type *menu* to see our dishes\n` +
+        `📝 Just tell me what you'd like to order\n` +
+        `🔍 Send an Order ID to track your order\n\n` +
+        `Example: "2 pizza 1 coke" or "I want burger"\n\n` +
+        `Need help? Just ask! 😊`;
+
+      await WhatsAppService.sendMessage(phoneNumber, message);
+    } catch (error) {
+      console.error('Error handling quit command:', error);
+    }
+  }
+
+  // Handle welcome stage
+  static async handleWelcomeStage(phoneNumber, message, session) {
+    if (message.includes('menu') || message.includes('list')) {
+      await WhatsAppController.sendMenu(phoneNumber);
+      session.updateStage('browsing');
+    } else if (message.includes('track')) {
+      await WhatsAppController.askForOrderId(phoneNumber);
+      session.updateStage('tracking');
+    } else if (await WhatsAppController.isOrderMessage(message)) {
+      await WhatsAppController.handleOrderingStage(phoneNumber, message, session);
+    } else {
+      await WhatsAppController.sendWelcomeMessage(phoneNumber);
+    }
+  }
+
+  // Handle browsing stage (looking at menu)
+  static async handleBrowsingStage(phoneNumber, message, session) {
+    if (await WhatsAppController.isOrderMessage(message)) {
+      session.updateStage('ordering');
+      await WhatsAppController.handleOrderingStage(phoneNumber, message, session);
+    } else if (message.includes('menu')) {
+      await WhatsAppController.sendMenu(phoneNumber);
+    } else {
+      await WhatsAppService.sendMessage(
+        phoneNumber,
+        `🍽️ I can help you order! Try saying:\n\n` +
+        `• "2 pizza 1 coke"\n` +
+        `• "I want burger"\n` +
+        `• "menu" to see all dishes\n\n` +
+        `What would you like to order? 😊`
+      );
+    }
+  }
+
+  // Handle ordering stage (building order)
+  static async handleOrderingStage(phoneNumber, message, session) {
+    const dishes = await Dish.find({ available: true });
+    const geminiService = new GeminiService();
+    
+    // Get conversation context
+    const context = session.context.messageHistory
+      .slice(-3)
+      .map(msg => `${msg.type}: ${msg.message}`)
+      .join('\n');
+
+    const orderItems = await geminiService.parseOrderFromMessage(message, dishes, context);
+
+    if (!orderItems || orderItems.length === 0) {
+      session.context.retryCount = (session.context.retryCount || 0) + 1;
+      
+      if (session.context.retryCount >= 3) {
+        await WhatsAppService.sendMessage(
+          phoneNumber,
+          `😅 I'm having trouble understanding your order.\n\n` +
+          `🍽️ Type *menu* to see available dishes\n` +
+          `📝 Or try: "2 pizza 1 coke"\n\n` +
+          `Type *quit* to start over.`
+        );
+        return;
+      }
+
+      await WhatsAppService.sendMessage(
+        phoneNumber,
+        `🤔 I couldn't find those items on our menu.\n\n` +
+        `Try: "2 pizza 1 coke" or type *menu* to see available dishes.`
+      );
+      return;
+    }
+
+    // Add items to pending order
+    if (!session.context.pendingOrder) {
+      session.context.pendingOrder = { items: [], totalAmount: 0 };
+    }
+
+    // Merge with existing items
+    for (const newItem of orderItems) {
+      const existingItem = session.context.pendingOrder.items.find(
+        item => item.name === newItem.name
+      );
+      
+      if (existingItem) {
+        existingItem.quantity += newItem.quantity;
+      } else {
+        session.context.pendingOrder.items.push(newItem);
+      }
+    }
+
+    // Calculate total
+    session.context.pendingOrder.totalAmount = session.context.pendingOrder.items
+      .reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+    // Show order confirmation
+    await WhatsAppController.showOrderConfirmation(phoneNumber, session);
+    session.updateStage('confirming_order');
   }
 
   // Handle order tracking requests
@@ -164,7 +310,33 @@ class WhatsAppController {
         message += `⏱️ Estimated time: ${order.timeRequired} minutes\n`;
       }
 
-      message += `📅 Ordered: ${moment(order.createdAt).tz('Asia/Kolkata').format('DD/MM/YYYY hh:mm A')}`;
+      // Enhanced timestamp formatting
+      const orderTime = moment(order.createdAt).tz('Asia/Kolkata');
+      const now = moment().tz('Asia/Kolkata');
+      const diffMinutes = now.diff(orderTime, 'minutes');
+      
+      let timeDisplay;
+      if (diffMinutes < 60) {
+        timeDisplay = `${diffMinutes} minutes ago`;
+      } else if (diffMinutes < 1440) { // Less than 24 hours
+        timeDisplay = `${Math.floor(diffMinutes / 60)} hours ago`;
+      } else {
+        timeDisplay = orderTime.format('DD/MM/YYYY hh:mm A');
+      }
+      
+      message += `📅 Ordered: ${timeDisplay}`;
+
+      // Add estimated completion time for preparing orders
+      if (order.status === 'preparing' && order.timeRequired) {
+        const completionTime = moment(order.preparationStartedAt || order.createdAt)
+          .add(order.timeRequired, 'minutes')
+          .tz('Asia/Kolkata');
+        
+        if (completionTime.isAfter(now)) {
+          const remainingMinutes = completionTime.diff(now, 'minutes');
+          message += `\n⏱️ Ready in: ~${remainingMinutes} minutes`;
+        }
+      }
 
       await WhatsAppService.sendMessage(phoneNumber, message);
     } catch (error) {
@@ -176,7 +348,7 @@ class WhatsAppController {
     }
   }
 
-  // Send menu to customer
+  // Send menu to customer with clean formatting
   static async sendMenu(phoneNumber) {
     try {
       const dishes = await Dish.find({ available: true }).sort({ name: 1 });
@@ -189,18 +361,21 @@ class WhatsAppController {
         return;
       }
 
-      let menuMessage = '🍽️ *OrderEase Menu*\n\n';
+      let menuMessage = `🍽️ *OrderEase Menu*\n\n`;
+      
       dishes.forEach((dish, index) => {
         menuMessage += `${index + 1}. *${dish.name}* - ₹${dish.price}\n`;
         if (dish.description) {
-          menuMessage += `   ${dish.description}\n`;
+          menuMessage += `   _${dish.description}_\n`;
         }
-        menuMessage += '\n';
+        menuMessage += `\n`;
       });
 
-      menuMessage += '📝 *To place an order, reply with:*\n';
-      menuMessage += 'Example: "I want 2 Pizza and 1 Coke"\n\n';
-      menuMessage += '📞 Need help? Just ask!';
+      menuMessage += `📝 *How to order:*\n`;
+      menuMessage += `• "2 pizza 1 coke"\n`;
+      menuMessage += `• "I want burger"\n`;
+      menuMessage += `• "pizza and coke"\n\n`;
+      menuMessage += `Just tell me what you'd like! 😊`;
 
       await WhatsAppService.sendMessage(phoneNumber, menuMessage);
     } catch (error) {
@@ -287,14 +462,181 @@ class WhatsAppController {
     }
   }
 
-  // Send default response for unrecognized messages
-  static async sendDefaultResponse(phoneNumber) {
+  // Show order confirmation with quantities
+  static async showOrderConfirmation(phoneNumber, session) {
+    const order = session.context.pendingOrder;
+    
+    let message = `🛒 *Your Order*\n\n`;
+    
+    order.items.forEach(item => {
+      message += `• ${item.name} × ${item.quantity} = ₹${item.price * item.quantity}\n`;
+    });
+    
+    message += `\n💰 *Total: ₹${order.totalAmount}*\n\n`;
+    message += `✅ Reply *yes* to confirm\n`;
+    message += `✏️ Reply *add [item]* to add more\n`;
+    message += `❌ Reply *no* to cancel\n`;
+    message += `🔄 Reply *quit* to start over`;
+
+    await WhatsAppService.sendMessage(phoneNumber, message);
+  }
+
+  // Handle order confirmation stage
+  static async handleOrderConfirmationStage(phoneNumber, message, session) {
+    if (message.includes('yes') || message.includes('confirm')) {
+      await WhatsAppController.askForCustomerDetails(phoneNumber);
+      session.updateStage('collecting_details');
+    } else if (message.includes('no') || message.includes('cancel')) {
+      session.context.pendingOrder = { items: [], totalAmount: 0 };
+      session.updateStage('browsing');
+      await WhatsAppService.sendMessage(
+        phoneNumber,
+        `❌ Order cancelled. What would you like to order instead?`
+      );
+    } else if (message.includes('add')) {
+      // Handle adding more items
+      session.updateStage('ordering');
+      await WhatsAppController.handleOrderingStage(phoneNumber, message.replace('add', ''), session);
+    } else {
+      await WhatsAppService.sendMessage(
+        phoneNumber,
+        `Please reply:\n✅ *yes* to confirm\n❌ *no* to cancel\n✏️ *add [item]* for more items`
+      );
+    }
+  }
+
+  // Ask for customer details
+  static async askForCustomerDetails(phoneNumber) {
+    const message = `📝 *Almost done!* Please provide your details:\n\n` +
+      `Format: Name, Phone, Address\n` +
+      `Example: "John Doe, 9876543210, 123 Main Street"\n\n` +
+      `💡 You can also send them separately:\n` +
+      `Name: John Doe\n` +
+      `Phone: 9876543210\n` +
+      `Address: 123 Main Street`;
+
+    await WhatsAppService.sendMessage(phoneNumber, message);
+  }
+
+  // Handle details collection stage
+  static async handleDetailsCollectionStage(phoneNumber, message, session) {
+    const geminiService = new GeminiService();
+    const customerDetails = await geminiService.parseCustomerDetails(message);
+
+    if (!customerDetails.name || !customerDetails.phone || !customerDetails.address) {
+      session.context.retryCount = (session.context.retryCount || 0) + 1;
+      
+      if (session.context.retryCount >= 3) {
+        await WhatsAppService.sendMessage(
+          phoneNumber,
+          `😅 Let's try a simple format:\n\n` +
+          `Just send: Your Name, Phone Number, Address\n` +
+          `Example: John Doe, 9876543210, 123 Main St`
+        );
+        return;
+      }
+
+      await WhatsAppService.sendMessage(
+        phoneNumber,
+        `❌ Please provide all details:\n\n` +
+        `Format: Name, Phone, Address\n` +
+        `Example: "John Doe, 9876543210, 123 Main Street"`
+      );
+      return;
+    }
+
+    // Save customer details
+    session.context.customerInfo = customerDetails;
+
+    // Create payment link
+    try {
+      const paymentLink = await WhatsAppController.createPaymentLink(
+        session.context.pendingOrder.totalAmount,
+        phoneNumber
+      );
+
+      const paymentMessage = `✅ *Details Confirmed!*\n\n` +
+        `👤 ${customerDetails.name}\n` +
+        `📞 ${customerDetails.phone}\n` +
+        `📍 ${customerDetails.address}\n\n` +
+        `💰 Total: ₹${session.context.pendingOrder.totalAmount}\n\n` +
+        `💳 *Complete Payment:*\n${paymentLink}\n\n` +
+        `⚠️ Test mode - Use test card details\n\n` +
+        `After payment, you'll get your Order ID for tracking! 🎉`;
+
+      await WhatsAppService.sendMessage(phoneNumber, paymentMessage);
+      session.updateStage('payment_pending');
+
+    } catch (error) {
+      console.error('Error creating payment link:', error);
+      await WhatsAppService.sendMessage(
+        phoneNumber,
+        `❌ Sorry, there was an error creating the payment link. Please try again or contact support.`
+      );
+    }
+  }
+
+  // Handle payment pending stage
+  static async handlePaymentPendingStage(phoneNumber, message, session) {
+    if (message.includes('paid') || message.includes('payment')) {
+      await WhatsAppService.sendMessage(
+        phoneNumber,
+        `⏳ Checking your payment status...\n\n` +
+        `If you've completed payment, you'll receive confirmation shortly.\n\n` +
+        `💡 Your order will be processed automatically once payment is confirmed.`
+      );
+    } else {
+      await WhatsAppService.sendMessage(
+        phoneNumber,
+        `⏳ Waiting for payment confirmation...\n\n` +
+        `Please complete the payment using the link sent earlier.\n\n` +
+        `Need help? Type *quit* to start over.`
+      );
+    }
+  }
+
+  // Handle tracking stage
+  static async handleTrackingStage(phoneNumber, message, session) {
+    if (message.match(/^\d{8}-\d{3}$/)) {
+      await WhatsAppController.handleTrackingRequest(phoneNumber, message);
+      session.updateStage('welcome');
+    } else {
+      await WhatsAppController.askForOrderId(phoneNumber);
+    }
+  }
+
+  // Ask for order ID
+  static async askForOrderId(phoneNumber) {
+    await WhatsAppService.sendMessage(
+      phoneNumber,
+      `🔍 Please send your Order ID to track your order.\n\n` +
+      `Format: YYYYMMDD-XXX\n` +
+      `Example: 20241031-001`
+    );
+  }
+
+  // Check if message is an order
+  static async isOrderMessage(message) {
+    // Simple heuristics for order detection
+    const orderKeywords = ['want', 'order', 'get', 'pizza', 'burger', 'coke', 'pasta'];
+    const hasNumbers = /\d/.test(message);
+    const hasOrderKeywords = orderKeywords.some(keyword => message.includes(keyword));
+    
+    return hasNumbers || hasOrderKeywords || message.split(' ').length <= 6;
+  }
+
+  // Send welcome message
+  static async sendWelcomeMessage(phoneNumber) {
     const message = `👋 Welcome to *OrderEase*!\n\n` +
-      `🍽️ Type "menu" to see our menu\n` +
-      `📝 Type "I want [items]" to place an order\n` +
-      `🔍 Type "track [OrderID]" to track your order\n\n` +
-      `Example: "I want 2 Pizza and 1 Coke"\n\n` +
-      `Need help? Just ask! 😊`;
+      `🍽️ Type *menu* to see our dishes\n` +
+      `📝 Just tell me what you'd like to order\n` +
+      `🔍 Send an Order ID to track your order\n\n` +
+      `Examples:\n` +
+      `• "2 pizza 1 coke"\n` +
+      `• "I want burger"\n` +
+      `• "menu"\n\n` +
+      `💡 Type *quit* anytime to start fresh\n\n` +
+      `How can I help you today? 😊`;
 
     await WhatsAppService.sendMessage(phoneNumber, message);
   }
