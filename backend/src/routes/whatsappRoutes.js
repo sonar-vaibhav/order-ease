@@ -16,6 +16,17 @@ router.post('/razorpay-webhook', RazorpayWebhookHandler.handleWebhook);
 // Payment success callback page
 router.get('/payment-success', RazorpayWebhookHandler.handlePaymentSuccess);
 
+// Health check endpoint
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    message: 'WhatsApp full system is running',
+    timestamp: new Date().toISOString(),
+    webhookUrl: `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/whatsapp/webhook`,
+    features: ['Order Processing', 'Payment Integration', 'Order Tracking', 'Gemini AI']
+  });
+});
+
 // Test endpoint to send a message (for development/testing)
 router.post('/send-test-message', async (req, res) => {
   try {
