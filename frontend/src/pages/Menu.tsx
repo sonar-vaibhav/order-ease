@@ -12,8 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/context/CartContext";
 
 export default function Menu() {
-  // Add console.log to print VITE_BACKEND_URL
-  console.log('VITE_BACKEND_URL:', import.meta.env.VITE_BACKEND_URL);
+  // Backend URL configured from environment
   // State to hold menu items fetched from backend
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");

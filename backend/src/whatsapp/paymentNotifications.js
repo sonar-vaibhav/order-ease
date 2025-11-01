@@ -7,7 +7,7 @@ class PaymentNotifications {
   // Handle payment success - send WhatsApp notification
   static async handlePaymentSuccess(paymentData) {
     try {
-      console.log('💳 Processing payment success:', paymentData);
+      // Processing payment success
 
       const { razorpay_payment_id, whatsapp_order_id, phoneNumber } = paymentData;
 
@@ -66,7 +66,7 @@ class PaymentNotifications {
   // Handle payment failure - send WhatsApp notification
   static async handlePaymentFailure(paymentData) {
     try {
-      console.log('💳 Processing payment failure:', paymentData);
+      // Processing payment failure
 
       const { phoneNumber, orderId } = paymentData;
 
@@ -112,13 +112,12 @@ class PaymentNotifications {
       const totalAmount = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       successMessage += `\n💰 Total: ₹${totalAmount}\n\n`;
       
-      successMessage += `👨‍🍳 Your order is being prepared\n`;
-      successMessage += `⏱️ Estimated time: 15-30 minutes\n\n`;
-      successMessage += `🔍 *Track anytime:* Send ${order.displayOrderId}\n\n`;
-      successMessage += `Thank you for choosing OrderEase! 😊`;
+      successMessage += `� *Tracuk anytime:* Send ${order.displayOrderId}\n\n`;
+      successMessage += `Thank you for choosing OrderEase! 😊\n\n`;
+      successMessage += `� Tyrpe *quit* to start a new order`;
 
       const success = await WhatsAppService.sendMessage(phoneNumber, successMessage);
-      console.log(`📱 Payment success notification sent to ${phoneNumber}:`, success);
+      // Payment success notification sent
       
       return success;
 
@@ -171,7 +170,7 @@ class PaymentNotifications {
       whatsappOrder.status = 'completed';
       await whatsappOrder.save();
 
-      console.log(`✅ Main order created: ${displayOrderId}`);
+      // Main order created successfully
       return order;
 
     } catch (error) {

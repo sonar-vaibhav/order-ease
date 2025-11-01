@@ -26,8 +26,7 @@ interface Dish {
 }
 
 export default function AdminDashboard() {
-  // Add console.log to print VITE_BACKEND_URL
-  console.log('VITE_BACKEND_URL:', import.meta.env.VITE_BACKEND_URL);
+  // Backend URL configured from environment
   const navigate = useNavigate();
   const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);

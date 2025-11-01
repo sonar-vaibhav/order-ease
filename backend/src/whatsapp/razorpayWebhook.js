@@ -42,7 +42,7 @@ class RazorpayWebhookHandler {
       const event = body.event;
       const payload = body.payload;
 
-      console.log(`Received Razorpay webhook: ${event}`);
+      // Processing Razorpay webhook event
 
       switch (event) {
         case 'payment_link.paid':
@@ -58,7 +58,7 @@ class RazorpayWebhookHandler {
           break;
         
         default:
-          console.log(`Unhandled webhook event: ${event}`);
+          // Unhandled webhook event
       }
 
       return res.status(200).json({ status: 'success' });
@@ -98,7 +98,7 @@ class RazorpayWebhookHandler {
           const PaymentNotifications = require('./paymentNotifications');
           await PaymentNotifications.sendPaymentSuccessMessage(pendingOrder.customer.phone, pendingOrder);
           
-          console.log(`Payment successful for simplified order: ${pendingOrder.displayOrderId}`);
+          // Payment successful for order
         }
         return;
       }
@@ -137,7 +137,7 @@ class RazorpayWebhookHandler {
       const PaymentNotifications = require('./paymentNotifications');
       await PaymentNotifications.sendPaymentSuccessMessage(whatsappOrder.phoneNumber, orderData);
 
-      console.log(`Payment successful for WhatsApp order: ${whatsappOrderId}`);
+      // Payment successful for WhatsApp order
     } catch (error) {
       console.error('Error handling payment link paid:', error);
     }
@@ -158,7 +158,7 @@ class RazorpayWebhookHandler {
         const mainOrder = await Order.findById(whatsappOrder.mainOrderId);
         if (mainOrder && mainOrder.status === 'queued') {
           // Order is already created and in queue, no additional action needed
-          console.log(`Payment captured for order: ${mainOrder.displayOrderId}`);
+          // Payment captured for order
         }
       }
     } catch (error) {
@@ -220,12 +220,12 @@ class RazorpayWebhookHandler {
           await whatsappOrder.save();
         }
         
-        console.log(`Payment failed notification sent to ${phoneNumber}`);
+        // Payment failed notification sent
       } else {
-        console.log('No WhatsApp order or phone number found for failed payment');
+        // No order found for failed payment
       }
 
-      console.log(`Payment failed: ${payment.id}`);
+      // Payment failed processed
     } catch (error) {
       console.error('Error handling payment failed:', error);
     }
@@ -270,7 +270,7 @@ class RazorpayWebhookHandler {
       const order = new Order(orderData);
       const savedOrder = await order.save();
 
-      console.log(`Created main order: ${displayOrderId} from WhatsApp order: ${whatsappOrder._id}`);
+      // Main order created successfully
       return savedOrder;
     } catch (error) {
       console.error('Error creating main order:', error);

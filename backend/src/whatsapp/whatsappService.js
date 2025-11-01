@@ -36,7 +36,7 @@ class WhatsAppService {
         }
       });
 
-      console.log(`Message sent to ${to}:`, response.data);
+      // Message sent successfully
       return true;
     } catch (error) {
       console.error('Error sending WhatsApp message:', error.response?.data || error.message);
@@ -77,7 +77,7 @@ class WhatsAppService {
         }
       });
 
-      console.log(`Template message sent to ${to}:`, response.data);
+      // Template message sent successfully
       return true;
     } catch (error) {
       console.error('Error sending WhatsApp template message:', error.response?.data || error.message);
@@ -126,7 +126,7 @@ class WhatsAppService {
         }
       });
 
-      console.log(`Interactive message sent to ${to}:`, response.data);
+      // Interactive message sent successfully
       return true;
     } catch (error) {
       console.error('Error sending WhatsApp interactive message:', error.response?.data || error.message);
@@ -160,7 +160,7 @@ class WhatsAppService {
         }
       });
 
-      console.log(`Message ${messageId} marked as read:`, response.data);
+      // Message marked as read successfully
       return true;
     } catch (error) {
       console.error('Error marking message as read:', error.response?.data || error.message);
@@ -234,7 +234,8 @@ class WhatsAppService {
       
       message += `⏳ Status: Order Received\n`;
       message += `📅 Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n\n`;
-      message += `🔍 Track your order anytime by sending: *${orderDetails.displayOrderId}*`;
+      message += `🔍 Track your order anytime by sending: *${orderDetails.displayOrderId}*\n\n`;
+      message += `💡 Type *quit* to start a new order`;
 
       return await WhatsAppService.sendMessage(to, message);
     } catch (error) {
@@ -261,8 +262,6 @@ class WhatsAppService {
       const totalAmount = orderDetails.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       message += `\n💰 Total: ₹${totalAmount}\n\n`;
       
-      message += `👨‍🍳 Your order is being prepared\n`;
-      message += `⏱️ Estimated time: 15-30 minutes\n\n`;
       message += `🔍 *Track anytime:* Send ${orderDetails.displayOrderId}\n\n`;
       message += `Thank you for choosing OrderEase! 😊\n\n`;
       message += `💡 Type *quit* to start a new order`;
@@ -299,10 +298,7 @@ class WhatsAppService {
         message += `🎉 Your order is ready for pickup!\n`;
         message += `📍 Please collect from the restaurant.\n\n`;
       } else if (newStatus === 'preparing') {
-        message += `👨‍🍳 Your order is being prepared.\n`;
-        if (orderDetails.timeRequired) {
-          message += `⏱️ Estimated time: ${orderDetails.timeRequired} minutes\n\n`;
-        }
+        message += `🔄 Your order is now being prepared.\n\n`;
       }
 
       message += `Thank you for your patience! 😊`;

@@ -306,9 +306,7 @@ class WhatsAppController {
       const totalAmount = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       message += `\n💰 Total: ₹${totalAmount}\n`;
 
-      if (order.timeRequired && order.status === 'preparing') {
-        message += `⏱️ Estimated time: ${order.timeRequired} minutes\n`;
-      }
+      // Removed estimated time display
 
       // Enhanced timestamp formatting
       const orderTime = moment(order.createdAt).tz('Asia/Kolkata');

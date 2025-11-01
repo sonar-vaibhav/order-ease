@@ -44,8 +44,7 @@ function Countdown({ startTime, durationMinutes }: { startTime: string, duration
 }
 
 export default function TrackOrder() {
-  // Add console.log to print VITE_BACKEND_URL
-  console.log('VITE_BACKEND_URL:', import.meta.env.VITE_BACKEND_URL);
+  // Backend URL configured from environment
   const { orderId } = useParams();
   const [searchOrderId, setSearchOrderId] = useState(orderId || "");
   const [currentOrder, setCurrentOrder] = useState<any>(null);

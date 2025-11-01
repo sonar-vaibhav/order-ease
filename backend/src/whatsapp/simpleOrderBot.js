@@ -9,7 +9,7 @@ class SimpleOrderBot {
   static async handleMessage(phoneNumber, messageBody) {
     try {
       const message = messageBody.toLowerCase().trim();
-      console.log(`📱 ${phoneNumber}: "${messageBody}"`);
+      // Processing message from user
 
       // Handle special commands
       if (message === 'menu' || message === 'list') {
@@ -58,8 +58,7 @@ class SimpleOrderBot {
       const orderItems = [];
       const words = message.toLowerCase().split(/\s+/);
 
-      console.log('🔍 Parsing:', message);
-      console.log('📋 Available dishes:', dishes.map(d => d.name));
+      // Parsing order from message
 
       // Look for patterns like "2 pizza", "1 margherita", etc.
       for (let i = 0; i < words.length; i++) {
@@ -81,7 +80,7 @@ class SimpleOrderBot {
             });
 
             if (matchingDish) {
-              console.log(`✅ Found: ${quantity} x ${matchingDish.name}`);
+              // Found matching dish
               
               // Check if already in order
               const existing = orderItems.find(item => item.name === matchingDish.name);
@@ -108,7 +107,7 @@ class SimpleOrderBot {
               message.includes(dishLower.replace(/s$/, '')) ||
               SimpleOrderBot.fuzzyMatch(dishLower, message)) {
             
-            console.log(`✅ Found (qty 1): ${dish.name}`);
+            // Found dish with default quantity
             orderItems.push({
               name: dish.name,
               quantity: 1,
@@ -119,7 +118,7 @@ class SimpleOrderBot {
         }
       }
 
-      console.log('📦 Parsed items:', orderItems);
+      // Order parsing completed
       return orderItems;
 
     } catch (error) {
@@ -170,7 +169,8 @@ class SimpleOrderBot {
       message += `📝 Please send your details:\n`;
       message += `Format: Name, Phone\n\n`;
       message += `Example: John Doe, 9876543210\n\n`;
-      message += `Or reply *cancel* to cancel this order`;
+      message += `Or reply *cancel* to cancel this order\n\n`;
+      message += `💡 After order completion, type *quit* to start a new session`;
 
       await WhatsAppService.sendMessage(phoneNumber, message);
 
@@ -303,7 +303,7 @@ class SimpleOrderBot {
   // Handle customer details
   static async handleCustomerDetails(phoneNumber, message) {
     try {
-      console.log(`📝 Processing customer details for ${phoneNumber}: "${message}"`);
+      // Processing customer details
       
       // Find pending order waiting for details
       const whatsappOrder = await WhatsAppOrder.findOne({
@@ -311,10 +311,10 @@ class SimpleOrderBot {
         status: 'pending_details'
       });
 
-      console.log(`🔍 Found pending order:`, whatsappOrder ? 'Yes' : 'No');
+      // Checking for pending order
 
       if (!whatsappOrder) {
-        console.log(`❌ No pending order found for ${phoneNumber}`);
+        // No pending order found
         return await WhatsAppService.sendMessage(phoneNumber, '❌ No pending order found. Please place a new order.');
       }
 
@@ -428,7 +428,7 @@ class SimpleOrderBot {
         callback_method: 'get'
       });
 
-      console.log('✅ Payment link created:', paymentLink.short_url);
+      // Payment link created successfully
       return paymentLink.short_url;
 
     } catch (error) {
@@ -489,10 +489,9 @@ class SimpleOrderBot {
       });
       
       confirmMessage += `\n💰 Total: ₹${whatsappOrder.totalAmount}\n\n`;
-      confirmMessage += `👨‍🍳 Your order is being prepared\n`;
-      confirmMessage += `⏱️ Estimated time: 15-30 minutes\n\n`;
       confirmMessage += `🔍 *Track anytime:* Send ${displayOrderId}\n\n`;
-      confirmMessage += `Thank you for choosing OrderEase! 😊`;
+      confirmMessage += `Thank you for choosing OrderEase! 😊\n\n`;
+      confirmMessage += `💡 Type *quit* to start a new order`;
 
       await WhatsAppService.sendMessage(whatsappOrder.phoneNumber, confirmMessage);
 

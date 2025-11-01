@@ -7,8 +7,7 @@ const dishRoutes = require('./src/routes/dishRoutes'); // import dish routes
 const whatsappRoutes = require('./src/routes/whatsappRoutes'); // import whatsapp routes
 const simpleWhatsappRoutes = require('./src/routes/simpleWhatsappRoutes'); // import simple whatsapp routes
 
-console.log('RAZORPAY_KEY_ID:', process.env.RAZORPAY_KEY_ID);
-console.log('RAZORPAY_KEY_SECRET:', process.env.RAZORPAY_KEY_SECRET);
+// Razorpay configuration loaded from environment variables
 
 
 dotenv.config();
