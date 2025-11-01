@@ -51,10 +51,14 @@ class SimpleWhatsAppController {
         status: 'pending_details'
       });
 
+      console.log(`🔍 Pending order for ${from}:`, pendingOrder ? 'Found' : 'Not found');
+
       if (pendingOrder) {
+        console.log(`📝 Handling customer details for ${from}`);
         // Handle customer details
         await SimpleOrderBot.handleCustomerDetails(from, messageBody);
       } else {
+        console.log(`💬 Handling normal message for ${from}`);
         // Handle normal message
         await SimpleOrderBot.handleMessage(from, messageBody);
       }

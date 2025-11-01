@@ -163,8 +163,8 @@ class SimpleOrderBot {
       });
       message += `\n💰 *Total: ₹${totalAmount}*\n\n`;
       message += `📝 Please send your details:\n`;
-      message += `Format: Name, Phone, Address\n\n`;
-      message += `Example: John Doe, 9876543210, Mumbai\n\n`;
+      message += `Format: Name, Phone\n\n`;
+      message += `Example: John Doe, 9876543210\n\n`;
       message += `Or reply *cancel* to cancel this order`;
 
       await WhatsAppService.sendMessage(phoneNumber, message);
@@ -298,13 +298,18 @@ class SimpleOrderBot {
   // Handle customer details
   static async handleCustomerDetails(phoneNumber, message) {
     try {
+      console.log(`📝 Processing customer details for ${phoneNumber}: "${message}"`);
+      
       // Find pending order
       const whatsappOrder = await WhatsAppOrder.findOne({
         phoneNumber,
         status: 'pending_details'
       });
 
+      console.log(`🔍 Found pending order:`, whatsappOrder ? 'Yes' : 'No');
+
       if (!whatsappOrder) {
+        console.log(`❌ No pending order found for ${phoneNumber}`);
         return await WhatsAppService.sendMessage(phoneNumber, '❌ No pending order found. Please place a new order.');
       }
 
@@ -313,19 +318,36 @@ class SimpleOrderBot {
         return await WhatsAppService.sendMessage(phoneNumber, '❌ Order cancelled. Type *menu* to start a new order.');
       }
 
-      // Parse customer details
+      // Parse customer details - now only need name and phone
       const parts = message.split(',').map(part => part.trim());
-      if (parts.length < 3) {
+      if (parts.length < 2) {
         return await WhatsAppService.sendMessage(
           phoneNumber,
-          '❌ Please provide: Name, Phone, Address\n\nExample: John Doe, 9876543210, Mumbai'
+          '❌ Please provide: Name, Phone\n\nExample: John Doe, 9876543210'
         );
       }
 
-      const [name, phone, address] = parts;
+      const [name, phone] = parts;
+      
+      // Validate phone number (should be 10 digits)
+      const phoneRegex = /^\d{10}$/;
+      if (!phoneRegex.test(phone)) {
+        return await WhatsAppService.sendMessage(
+          phoneNumber,
+          '❌ Please provide a valid 10-digit phone number\n\nExample: Vaibhav, 9876543210'
+        );
+      }
 
-      // Update order with customer details
-      whatsappOrder.customer = { name, phone, address };
+      // Validate name (should not be empty and not be a number)
+      if (!name || name.length < 2 || /^\d+$/.test(name)) {
+        return await WhatsAppService.sendMessage(
+          phoneNumber,
+          '❌ Please provide a valid name\n\nExample: Vaibhav, 9876543210'
+        );
+      }
+
+      // Update order with customer details (no address needed)
+      whatsappOrder.customer = { name, phone, address: 'Not required' };
       whatsappOrder.status = 'pending_payment';
       await whatsappOrder.save();
 
@@ -338,8 +360,7 @@ class SimpleOrderBot {
 
         const paymentMessage = `✅ *Details Confirmed!*\n\n` +
           `👤 ${name}\n` +
-          `📞 ${phone}\n` +
-          `📍 ${address}\n\n` +
+          `📞 ${phone}\n\n` +
           `💰 Total: ₹${whatsappOrder.totalAmount}\n\n` +
           `💳 *Complete Payment:*\n${paymentLink}\n\n` +
           `⚠️ Test mode - Use test card details\n\n` +
@@ -355,8 +376,7 @@ class SimpleOrderBot {
           phoneNumber,
           `✅ *Details Confirmed!*\n\n` +
           `👤 ${name}\n` +
-          `📞 ${phone}\n` +
-          `📍 ${address}\n\n` +
+          `📞 ${phone}\n\n` +
           `💰 Total: ₹${whatsappOrder.totalAmount}\n\n` +
           `⚠️ Payment system temporarily unavailable.\n` +
           `Your order is confirmed! 🎉`
