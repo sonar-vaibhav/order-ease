@@ -24,6 +24,15 @@ class SimpleOrderBot {
         return await SimpleOrderBot.sendWelcome(phoneNumber);
       }
 
+      if (message === 'reset' || message === 'clear') {
+        // Clear any pending orders
+        await WhatsAppOrder.deleteMany({
+          phoneNumber,
+          status: { $in: ['pending_details', 'pending_payment'] }
+        });
+        return await WhatsAppService.sendMessage(phoneNumber, '🔄 All pending orders cleared. You can start fresh now!');
+      }
+
       // Try to parse as order
       const orderItems = await SimpleOrderBot.parseSimpleOrder(message);
       if (orderItems.length > 0) {
@@ -136,23 +145,19 @@ class SimpleOrderBot {
     try {
       const totalAmount = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-      // Create or update WhatsApp order
-      let whatsappOrder = await WhatsAppOrder.findOne({
+      // Clear any existing pending orders for this user
+      await WhatsAppOrder.deleteMany({
         phoneNumber,
         status: { $in: ['pending_details', 'pending_payment'] }
       });
 
-      if (!whatsappOrder) {
-        whatsappOrder = new WhatsAppOrder({
-          phoneNumber,
-          items: orderItems,
-          totalAmount,
-          status: 'pending_details'
-        });
-      } else {
-        whatsappOrder.items = orderItems;
-        whatsappOrder.totalAmount = totalAmount;
-      }
+      // Create new WhatsApp order
+      const whatsappOrder = new WhatsAppOrder({
+        phoneNumber,
+        items: orderItems,
+        totalAmount,
+        status: 'pending_details'
+      });
 
       await whatsappOrder.save();
 
@@ -300,10 +305,10 @@ class SimpleOrderBot {
     try {
       console.log(`📝 Processing customer details for ${phoneNumber}: "${message}"`);
       
-      // Find pending order
+      // Find pending order (could be pending_details or pending_payment)
       const whatsappOrder = await WhatsAppOrder.findOne({
         phoneNumber,
-        status: 'pending_details'
+        status: { $in: ['pending_details', 'pending_payment'] }
       });
 
       console.log(`🔍 Found pending order:`, whatsappOrder ? 'Yes' : 'No');
