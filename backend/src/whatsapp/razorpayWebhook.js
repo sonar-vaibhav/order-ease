@@ -78,6 +78,28 @@ class RazorpayWebhookHandler {
       
       if (!whatsappOrderId) {
         console.error('No WhatsApp order ID found in payment link notes');
+        
+        // Try to handle simplified approach - find pending payment order
+        const pendingOrder = await Order.findOne({
+          status: 'pending_payment',
+          source: 'whatsapp'
+        }).sort({ createdAt: -1 });
+
+        if (pendingOrder) {
+          // Update order status
+          pendingOrder.status = 'queued';
+          pendingOrder.paymentDetails = {
+            razorpay_payment_id: payment.id,
+            payment_status: 'completed'
+          };
+          await pendingOrder.save();
+
+          // Send success notification
+          const PaymentNotifications = require('./paymentNotifications');
+          await PaymentNotifications.sendPaymentSuccessMessage(pendingOrder.customer.phone, pendingOrder);
+          
+          console.log(`Payment successful for simplified order: ${pendingOrder.displayOrderId}`);
+        }
         return;
       }
 
@@ -112,7 +134,8 @@ class RazorpayWebhookHandler {
       }
 
       // Send confirmation message to customer
-      await WhatsAppService.sendPaymentSuccess(whatsappOrder.phoneNumber, orderData);
+      const PaymentNotifications = require('./paymentNotifications');
+      await PaymentNotifications.sendPaymentSuccessMessage(whatsappOrder.phoneNumber, orderData);
 
       console.log(`Payment successful for WhatsApp order: ${whatsappOrderId}`);
     } catch (error) {
@@ -148,25 +171,58 @@ class RazorpayWebhookHandler {
     try {
       const payment = payload.payment.entity;
       
-      // Find WhatsApp order by payment attempt
-      const whatsappOrder = await WhatsAppOrder.findOne({
-        status: 'pending_payment',
-        // You might need to store payment attempt ID or use other identifiers
-      });
+      // Try to find WhatsApp order by payment link notes if available
+      let whatsappOrder = null;
+      let phoneNumber = null;
+      
+      // If payment has notes with whatsapp_order_id
+      if (payment.notes && payment.notes.whatsapp_order_id) {
+        whatsappOrder = await WhatsAppOrder.findById(payment.notes.whatsapp_order_id);
+        if (whatsappOrder) {
+          phoneNumber = whatsappOrder.phoneNumber;
+        }
+      }
+      
+      // Fallback: find by pending payment status (most recent)
+      if (!whatsappOrder) {
+        whatsappOrder = await WhatsAppOrder.findOne({
+          status: 'pending_payment'
+        }).sort({ createdAt: -1 });
+        
+        if (whatsappOrder) {
+          phoneNumber = whatsappOrder.phoneNumber;
+        }
+      }
+      
+      // If no WhatsAppOrder found, try simplified approach
+      if (!phoneNumber) {
+        const pendingOrder = await Order.findOne({
+          status: 'pending_payment',
+          source: 'whatsapp'
+        }).sort({ createdAt: -1 });
+        
+        if (pendingOrder) {
+          phoneNumber = pendingOrder.customer.phone;
+        }
+      }
 
-      if (whatsappOrder) {
-        // Send payment failure message
-        await WhatsAppService.sendMessage(
-          whatsappOrder.phoneNumber,
-          `❌ *Payment Failed*\n\n` +
-          `Your payment could not be processed. Please try again.\n\n` +
-          `If you continue to face issues, please contact support.\n\n` +
-          `Order ID: ${whatsappOrder._id}`
-        );
+      if (phoneNumber) {
+        // Send payment failure message using PaymentNotifications
+        const PaymentNotifications = require('./paymentNotifications');
+        await PaymentNotifications.handlePaymentFailure({
+          phoneNumber: phoneNumber,
+          orderId: whatsappOrder ? whatsappOrder._id : 'unknown'
+        });
 
-        // Update order status
-        whatsappOrder.status = 'payment_failed';
-        await whatsappOrder.save();
+        // Update order status if WhatsAppOrder exists
+        if (whatsappOrder) {
+          whatsappOrder.status = 'payment_failed';
+          await whatsappOrder.save();
+        }
+        
+        console.log(`Payment failed notification sent to ${phoneNumber}`);
+      } else {
+        console.log('No WhatsApp order or phone number found for failed payment');
       }
 
       console.log(`Payment failed: ${payment.id}`);
