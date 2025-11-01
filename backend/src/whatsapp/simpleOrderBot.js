@@ -305,10 +305,10 @@ class SimpleOrderBot {
     try {
       console.log(`📝 Processing customer details for ${phoneNumber}: "${message}"`);
       
-      // Find pending order (could be pending_details or pending_payment)
+      // Find pending order waiting for details
       const whatsappOrder = await WhatsAppOrder.findOne({
         phoneNumber,
-        status: { $in: ['pending_details', 'pending_payment'] }
+        status: 'pending_details'
       });
 
       console.log(`🔍 Found pending order:`, whatsappOrder ? 'Yes' : 'No');

@@ -45,15 +45,15 @@ class SimpleWhatsAppController {
 
       console.log(`📱 Message from ${from}: "${messageBody}"`);
 
-      // Check if user has pending order waiting for details or payment
-      const pendingOrder = await WhatsAppOrder.findOne({
+      // Check if user has pending order waiting for details ONLY
+      const pendingDetailsOrder = await WhatsAppOrder.findOne({
         phoneNumber: from,
-        status: { $in: ['pending_details', 'pending_payment'] }
+        status: 'pending_details'
       });
 
-      console.log(`🔍 Pending order for ${from}:`, pendingOrder ? 'Found' : 'Not found');
+      console.log(`🔍 Pending details order for ${from}:`, pendingDetailsOrder ? 'Found' : 'Not found');
 
-      if (pendingOrder) {
+      if (pendingDetailsOrder) {
         console.log(`📝 Handling customer details for ${from}`);
         // Handle customer details
         await SimpleOrderBot.handleCustomerDetails(from, messageBody);
