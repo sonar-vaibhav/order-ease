@@ -3,6 +3,20 @@ const router = express.Router();
 const Order = require('../models/Order');
 const WhatsAppService = require('../whatsapp/whatsappService');
 
+// Add CORS headers for broadcast routes
+router.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
+
 // Broadcast model for storing broadcast history
 const mongoose = require('mongoose');
 
@@ -18,7 +32,12 @@ const Broadcast = mongoose.model('Broadcast', broadcastSchema);
 
 // Test endpoint
 router.get('/broadcast-test', (req, res) => {
-  res.json({ message: 'Broadcast routes are working!', timestamp: new Date() });
+  res.json({ 
+    message: 'Broadcast routes are working!', 
+    timestamp: new Date(),
+    cors: 'CORS headers applied',
+    origin: req.headers.origin || 'No origin header'
+  });
 });
 
 // Send broadcast message
