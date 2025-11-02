@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { Order, OrderStatus } from "@/types";
-import { TrendingUp, DollarSign, Clock, Users, ShoppingBag, Timer, X, Edit, Trash, ImagePlus, Check, Save } from "lucide-react";
+import { TrendingUp, DollarSign, Clock, Users, ShoppingBag, Timer, X, Edit, Trash, ImagePlus, Check, Save, Calendar, Filter, BarChart3, PieChart as PieChartIcon, Send, MessageSquare, Megaphone, UserCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 
@@ -33,6 +34,18 @@ export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | OrderStatus>('all');
   const [activeTab, setActiveTab] = useState("orders"); // State to track active tab
+  
+  // Analytics date filtering state
+  const [dateRange, setDateRange] = useState<'7days' | '30days' | '3months' | '6months' | '1year' | 'custom'>('7days');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [showCustomDates, setShowCustomDates] = useState(false);
+
+  // Broadcast state
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastType, setBroadcastType] = useState<'all' | 'recent'>('recent');
+  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
+  const [broadcastHistory, setBroadcastHistory] = useState<any[]>([]);
 
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loadingDishes, setLoadingDishes] = useState(false);
@@ -256,6 +269,69 @@ export default function AdminDashboard() {
     }
   };
 
+  // Broadcast functionality
+  const handleSendBroadcast = async () => {
+    if (!broadcastMessage.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a message to broadcast.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSendingBroadcast(true);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: broadcastMessage,
+          type: broadcastType
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        toast({
+          title: "Broadcast Sent",
+          description: `Message sent to ${result.sentCount} whitelisted customers (${result.totalCustomers} total customers in database).`
+        });
+        setBroadcastMessage('');
+        fetchBroadcastHistory();
+      } else {
+        throw new Error('Failed to send broadcast');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send broadcast message.",
+        variant: "destructive"
+      });
+      console.error("Failed to send broadcast:", error);
+    } finally {
+      setIsSendingBroadcast(false);
+    }
+  };
+
+  const fetchBroadcastHistory = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/broadcast-history`);
+      if (response.ok) {
+        const history = await response.json();
+        setBroadcastHistory(history);
+      }
+    } catch (error) {
+      console.error("Failed to fetch broadcast history:", error);
+    }
+  };
+
+  // Fetch broadcast history on component mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchBroadcastHistory();
+    }
+  }, [isAuthenticated]);
 
   if (!isAuthenticated) {
     return null; // Will redirect to login
@@ -278,57 +354,312 @@ export default function AdminDashboard() {
     picked: orders.filter(o => o.status === 'picked').length,
   };
 
-  // --- Analytics Calculations ---
+  // --- Enhanced Analytics Calculations ---
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
+  
+  // Get date range for filtering
+  const getDateRange = () => {
+    if (dateRange === 'custom' && customStartDate && customEndDate) {
+      const start = new Date(customStartDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(customEndDate);
+      end.setHours(23, 59, 59, 999);
+      return { start, end };
+    }
+    
+    const end = new Date();
+    end.setHours(23, 59, 59, 999); // End of today
+    const start = new Date();
+    start.setHours(0, 0, 0, 0); // Start of day
+    
+    switch (dateRange) {
+      case '7days':
+        start.setDate(end.getDate() - 6);
+        break;
+      case '30days':
+        start.setDate(end.getDate() - 29);
+        break;
+      case '3months':
+        start.setMonth(end.getMonth() - 3);
+        break;
+      case '6months':
+        start.setMonth(end.getMonth() - 6);
+        break;
+      case '1year':
+        start.setFullYear(end.getFullYear() - 1);
+        break;
+    }
+    
+    return { start, end };
+  };
+  
+  const { start: rangeStart, end: rangeEnd } = getDateRange();
+  
+  const analyticsOrders = orders.filter(order => {
+    const orderDate = new Date(order.createdAt);
+    return orderDate >= rangeStart && orderDate <= rangeEnd;
+  });
+  
   const ordersToday = orders.filter(order => order.createdAt.toISOString().slice(0, 10) === today);
   const todayOrdersCount = ordersToday.length;
   const todayRevenue = ordersToday.reduce((sum, order) => sum + order.totalAmount, 0);
-  const totalOrders = orders.length;
-  const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+  const totalOrders = analyticsOrders.length;
+  const totalRevenue = analyticsOrders.reduce((sum, order) => sum + order.totalAmount, 0);
   const averageOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : '0.00';
+  
+  // Previous period comparison
+  const periodDays = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24));
+  const prevStart = new Date(rangeStart);
+  prevStart.setDate(rangeStart.getDate() - periodDays);
+  const prevEnd = new Date(rangeStart);
+  const prevOrders = orders.filter(order => 
+    order.createdAt >= prevStart && order.createdAt < prevEnd
+  );
+  const prevRevenue = prevOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+  const revenueGrowth = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue * 100).toFixed(1) : '0';
 
-  // Top Dishes (by count in all orders)
-  const dishOrderCounts: Record<string, { name: string, count: number }> = {};
-  orders.forEach(order => {
+  // Top Dishes (by count in analytics orders)
+  const dishOrderCounts: Record<string, { name: string, count: number, revenue: number }> = {};
+  analyticsOrders.forEach(order => {
     order.items.forEach(item => {
       const name = item.menuItem.name;
-      if (!dishOrderCounts[name]) dishOrderCounts[name] = { name, count: 0 };
+      if (!dishOrderCounts[name]) dishOrderCounts[name] = { name, count: 0, revenue: 0 };
       dishOrderCounts[name].count += item.quantity;
+      dishOrderCounts[name].revenue += item.menuItem.price * item.quantity;
     });
   });
   const topDishes = Object.values(dishOrderCounts)
     .sort((a, b) => b.count - a.count)
-    .slice(0, 3);
-  const mostOrderedItem = topDishes[0]?.name || '';
+    .slice(0, 5);
+  const mostOrderedItem = topDishes[0]?.name || 'N/A';
 
-  // Weekly Orders (last 7 days)
-  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const weekAgo = new Date(now);
-  weekAgo.setDate(now.getDate() - 6);
-  const weeklyOrders = Array.from({ length: 7 }).map((_, i) => {
-    const d = new Date(weekAgo);
-    d.setDate(weekAgo.getDate() + i);
-    const dateStr = d.toISOString().slice(0, 10);
-    const dayOrders = orders.filter(order => order.createdAt.toISOString().slice(0, 10) === dateStr);
-    return {
-      day: daysOfWeek[d.getDay()],
-      date: dateStr,
-      orders: dayOrders.length,
-      revenue: dayOrders.reduce((sum, order) => sum + order.totalAmount, 0),
-    };
-  });
+  // Dynamic period data based on selected range
+  const getPeriodData = () => {
+    const data = [];
+    
+    if (dateRange === 'custom') {
+      // For custom range, determine the best interval based on the range
+      const daysDiff = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysDiff <= 7) {
+        // Show daily for up to 7 days
+        for (let i = 0; i < daysDiff; i++) {
+          const date = new Date(rangeStart);
+          date.setDate(rangeStart.getDate() + i);
+          date.setHours(0, 0, 0, 0);
+          
+          const nextDate = new Date(date);
+          nextDate.setDate(date.getDate() + 1);
+          
+          const dayOrders = analyticsOrders.filter(order => {
+            const orderDate = new Date(order.createdAt);
+            return orderDate >= date && orderDate < nextDate;
+          });
+          
+          data.push({
+            period: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            date: date.toISOString().slice(0, 10),
+            orders: dayOrders.length,
+            revenue: dayOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+          });
+        }
+      } else if (daysDiff <= 31) {
+        // Show daily for up to 31 days
+        for (let i = 0; i < daysDiff; i++) {
+          const date = new Date(rangeStart);
+          date.setDate(rangeStart.getDate() + i);
+          date.setHours(0, 0, 0, 0);
+          
+          const nextDate = new Date(date);
+          nextDate.setDate(date.getDate() + 1);
+          
+          const dayOrders = analyticsOrders.filter(order => {
+            const orderDate = new Date(order.createdAt);
+            return orderDate >= date && orderDate < nextDate;
+          });
+          
+          data.push({
+            period: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            date: date.toISOString().slice(0, 10),
+            orders: dayOrders.length,
+            revenue: dayOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+          });
+        }
+      } else {
+        // Show monthly for longer periods
+        const monthsDiff = Math.ceil(daysDiff / 30);
+        for (let i = 0; i < monthsDiff; i++) {
+          const monthStart = new Date(rangeStart);
+          monthStart.setMonth(rangeStart.getMonth() + i);
+          monthStart.setDate(1);
+          monthStart.setHours(0, 0, 0, 0);
+          
+          const monthEnd = new Date(monthStart);
+          monthEnd.setMonth(monthStart.getMonth() + 1);
+          monthEnd.setDate(0);
+          monthEnd.setHours(23, 59, 59, 999);
+          
+          const monthOrders = analyticsOrders.filter(order => {
+            const orderDate = new Date(order.createdAt);
+            return orderDate >= monthStart && orderDate <= monthEnd;
+          });
+          
+          data.push({
+            period: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+            date: monthStart.toISOString().slice(0, 10),
+            orders: monthOrders.length,
+            revenue: monthOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+          });
+        }
+      }
+    } else if (dateRange === '7days') {
+      // For 7 days, show each day individually
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(rangeStart);
+        date.setDate(rangeStart.getDate() + i);
+        date.setHours(0, 0, 0, 0);
+        
+        const nextDate = new Date(date);
+        nextDate.setDate(date.getDate() + 1);
+        
+        const dayOrders = analyticsOrders.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= date && orderDate < nextDate;
+        });
+        
+        data.push({
+          period: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: date.toISOString().slice(0, 10),
+          orders: dayOrders.length,
+          revenue: dayOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+        });
+      }
+    } else if (dateRange === '30days') {
+      // For 30 days, show each day
+      for (let i = 0; i < 30; i++) {
+        const date = new Date(rangeStart);
+        date.setDate(rangeStart.getDate() + i);
+        date.setHours(0, 0, 0, 0);
+        
+        const nextDate = new Date(date);
+        nextDate.setDate(date.getDate() + 1);
+        
+        const dayOrders = analyticsOrders.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= date && orderDate < nextDate;
+        });
+        
+        data.push({
+          period: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: date.toISOString().slice(0, 10),
+          orders: dayOrders.length,
+          revenue: dayOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+        });
+      }
+    } else if (dateRange === '3months') {
+      // For 3 months, show each month
+      const months = 3;
+      for (let i = 0; i < months; i++) {
+        const monthStart = new Date(rangeStart);
+        monthStart.setMonth(rangeStart.getMonth() + i);
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+        
+        const monthEnd = new Date(monthStart);
+        monthEnd.setMonth(monthStart.getMonth() + 1);
+        monthEnd.setDate(0);
+        monthEnd.setHours(23, 59, 59, 999);
+        
+        const monthOrders = analyticsOrders.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= monthStart && orderDate <= monthEnd;
+        });
+        
+        data.push({
+          period: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          date: monthStart.toISOString().slice(0, 10),
+          orders: monthOrders.length,
+          revenue: monthOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+        });
+      }
+    } else if (dateRange === '6months') {
+      // For 6 months, show each month
+      const months = 6;
+      for (let i = 0; i < months; i++) {
+        const monthStart = new Date(rangeStart);
+        monthStart.setMonth(rangeStart.getMonth() + i);
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+        
+        const monthEnd = new Date(monthStart);
+        monthEnd.setMonth(monthStart.getMonth() + 1);
+        monthEnd.setDate(0);
+        monthEnd.setHours(23, 59, 59, 999);
+        
+        const monthOrders = analyticsOrders.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= monthStart && orderDate <= monthEnd;
+        });
+        
+        data.push({
+          period: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          date: monthStart.toISOString().slice(0, 10),
+          orders: monthOrders.length,
+          revenue: monthOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+        });
+      }
+    } else if (dateRange === '1year') {
+      // For 1 year, show each month
+      const months = 12;
+      for (let i = 0; i < months; i++) {
+        const monthStart = new Date(rangeStart);
+        monthStart.setMonth(rangeStart.getMonth() + i);
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+        
+        const monthEnd = new Date(monthStart);
+        monthEnd.setMonth(monthStart.getMonth() + 1);
+        monthEnd.setDate(0);
+        monthEnd.setHours(23, 59, 59, 999);
+        
+        const monthOrders = analyticsOrders.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= monthStart && orderDate <= monthEnd;
+        });
+        
+        data.push({
+          period: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          date: monthStart.toISOString().slice(0, 10),
+          orders: monthOrders.length,
+          revenue: monthOrders.reduce((sum, order) => sum + order.totalAmount, 0),
+        });
+      }
+    }
+    
+    return data;
+  };
+  
+  const periodData = getPeriodData();
 
-  // Orders by Status
+  // Orders by Status (using analytics orders)
   const statusList = ['queued', 'preparing', 'ready', 'picked'];
   const ordersByStatus = statusList.map(status => ({
     status,
-    count: orders.filter(order => order.status === status).length
-  }));
+    count: analyticsOrders.filter(order => order.status === status).length
+  })).filter(item => item.count > 0);
 
   // Average Preparation Time (for orders with timeRequired)
   const prepTimes = orders.filter(o => o.timeRequired).map(o => o.timeRequired!);
   const avgPrepTime = prepTimes.length > 0 ? Math.round(prepTimes.reduce((a, b) => a + b, 0) / prepTimes.length) : 0;
+  
+  // Current order counts for live status (not filtered by date)
+  const currentOrderCounts = {
+    queued: orders.filter(order => order.status === 'queued').length,
+    preparing: orders.filter(order => order.status === 'preparing').length,
+    ready: orders.filter(order => order.status === 'ready').length,
+    picked: orders.filter(order => order.status === 'picked').length,
+  };
 
   // Chart colors - updated for new status colors
   const COLORS = ['hsl(var(--status-queued))', 'hsl(var(--status-preparing))', 'hsl(var(--status-ready))', 'hsl(var(--status-picked))'];
@@ -337,10 +668,10 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-background">
       <Navbar isAdmin onLogout={handleLogout} />
       
-      <main className="container py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Restaurant Dashboard</h1>
-          <p className="text-muted-foreground">
+      <main className="container py-4 sm:py-8 px-4 sm:px-6">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Restaurant Dashboard</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Manage orders and view analytics for your restaurant
           </p>
         </div>
@@ -352,10 +683,37 @@ export default function AdminDashboard() {
           onValueChange={setActiveTab}
           className="space-y-6"
         >
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="orders">Order Management</TabsTrigger>
-            <TabsTrigger value="dishes">Dish Management</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 h-auto p-1">
+            <TabsTrigger 
+              value="orders" 
+              className="text-xs sm:text-sm px-1 sm:px-4 py-2 sm:py-3 h-auto min-h-[3rem] sm:min-h-[2.5rem] flex items-center justify-center"
+            >
+              <div className="mobile-tab-text">
+                <div className="block sm:inline">Order</div>
+                <div className="block sm:inline sm:ml-1">Management</div>
+              </div>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="dishes" 
+              className="text-xs sm:text-sm px-1 sm:px-4 py-2 sm:py-3 h-auto min-h-[3rem] sm:min-h-[2.5rem] flex items-center justify-center"
+            >
+              <div className="mobile-tab-text">
+                <div className="block sm:inline">Dish</div>
+                <div className="block sm:inline sm:ml-1">Management</div>
+              </div>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="analytics" 
+              className="text-xs sm:text-sm px-1 sm:px-4 py-2 sm:py-3 h-auto min-h-[3rem] sm:min-h-[2.5rem] flex items-center justify-center"
+            >
+              <div className="mobile-tab-text">Analytics</div>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="broadcast" 
+              className="text-xs sm:text-sm px-1 sm:px-4 py-2 sm:py-3 h-auto min-h-[3rem] sm:min-h-[2.5rem] flex items-center justify-center"
+            >
+              <div className="mobile-tab-text">Broadcast</div>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="orders" className="space-y-6">
@@ -401,8 +759,10 @@ export default function AdminDashboard() {
 
             {/* Order Filters */}
             <div>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <h2 className="text-2xl font-bold">Order Management</h2>
+              <div className="flex flex-col gap-4 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <h2 className="text-xl sm:text-2xl font-bold">Order Management</h2>
+                </div>
                 <OrderFilters 
                   activeFilter={activeFilter}
                   onFilterChange={setActiveFilter}
@@ -525,126 +885,322 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-6">
-            {/* Top Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <ShoppingBag className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-medium">Top Dishes Today</span>
+            {/* Date Range Filter */}
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                  <div className="flex items-center space-x-2">
+                    <BarChart3 className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-lg sm:text-xl">Analytics Dashboard</CardTitle>
                   </div>
-                  <div className="space-y-2">
-                    {topDishes.map((dish, index) => (
-                      <div key={dish.name} className="flex justify-between text-sm">
-                        <span className="truncate">{index + 1}. {dish.name}</span>
-                        <span className="font-medium">{dish.count}</span>
+                  <div className="flex items-center space-x-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <select 
+                      value={dateRange} 
+                      onChange={(e) => {
+                        const value = e.target.value as any;
+                        setDateRange(value);
+                        setShowCustomDates(value === 'custom');
+                        if (value !== 'custom') {
+                          setCustomStartDate('');
+                          setCustomEndDate('');
+                        }
+                      }}
+                      className="px-3 py-1 border rounded-md text-sm bg-background w-full sm:w-auto"
+                    >
+                      <option value="7days">Last 7 Days</option>
+                      <option value="30days">Last 30 Days</option>
+                      <option value="3months">Last 3 Months</option>
+                      <option value="6months">Last 6 Months</option>
+                      <option value="1year">Last Year</option>
+                      <option value="custom">Custom Range</option>
+                    </select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {showCustomDates && (
+                  <div className="mb-4 p-4 bg-muted/50 rounded-lg">
+                    <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                        <Calendar className="w-4 h-4 text-muted-foreground sm:inline hidden" />
+                        <Label htmlFor="start-date" className="text-sm font-medium">From:</Label>
+                        <Input
+                          id="start-date"
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => setCustomStartDate(e.target.value)}
+                          className="w-full sm:w-auto"
+                        />
                       </div>
-                    ))}
+                      <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                        <Label htmlFor="end-date" className="text-sm font-medium">To:</Label>
+                        <Input
+                          id="end-date"
+                          type="date"
+                          value={customEndDate}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                          className="w-full sm:w-auto"
+                        />
+                      </div>
+                      {customStartDate && customEndDate && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full sm:w-auto"
+                          onClick={() => {
+                            // Force re-render by updating the date range
+                            setDateRange('custom');
+                          }}
+                        >
+                          Apply
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 mt-3">
+                      <span className="text-xs text-muted-foreground">Quick select:</span>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const today = new Date();
+                            const lastWeek = new Date();
+                            lastWeek.setDate(today.getDate() - 7);
+                            setCustomStartDate(lastWeek.toISOString().slice(0, 10));
+                            setCustomEndDate(today.toISOString().slice(0, 10));
+                          }}
+                        >
+                          Last Week
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const today = new Date();
+                            const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                            setCustomStartDate(firstOfMonth.toISOString().slice(0, 10));
+                            setCustomEndDate(today.toISOString().slice(0, 10));
+                          }}
+                        >
+                          This Month
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            const today = new Date();
+                            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                            const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+                            setCustomStartDate(lastMonth.toISOString().slice(0, 10));
+                            setCustomEndDate(lastMonthEnd.toISOString().slice(0, 10));
+                          }}
+                        >
+                          Last Month
+                        </Button>
+                      </div>
+                    </div>
+                    {customStartDate && customEndDate && new Date(customStartDate) > new Date(customEndDate) && (
+                      <p className="text-sm text-destructive mt-2">Start date must be before end date</p>
+                    )}
+                  </div>
+                )}
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p className="break-words">Date Range: {rangeStart.toLocaleDateString()} - {rangeEnd.toLocaleDateString()}</p>
+                  <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-1 sm:space-y-0">
+                    <p>Total Orders in Period: {analyticsOrders.length}</p>
+                    <p>All Orders: {orders.length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Enhanced Metrics Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <Card>
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-success" />
+                    <span className="text-xs sm:text-sm font-medium">Total Revenue</span>
+                  </div>
+                  <p className="text-2xl sm:text-3xl font-bold text-success">₹{totalRevenue.toFixed(0)}</p>
+                  <div className="flex items-center mt-2">
+                    <TrendingUp className="w-3 h-3 text-success mr-1" />
+                    <span className="text-xs text-success">+{revenueGrowth}% from previous period</span>
                   </div>
                 </CardContent>
               </Card>
               
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center space-x-2 mb-2">
-                    <Timer className="w-4 h-4 text-warning" />
-                    <span className="text-sm font-medium">Avg Prep Time</span>
+                    <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                    <span className="text-xs sm:text-sm font-medium">Total Orders</span>
                   </div>
-                  <p className="text-3xl font-bold text-warning">{avgPrepTime}m</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    From order to ready
+                  <p className="text-2xl sm:text-3xl font-bold text-primary">{totalOrders}</p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Avg: ₹{averageOrderValue} per order
                   </p>
                 </CardContent>
               </Card>
               
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center space-x-2 mb-2">
-                    <TrendingUp className="w-4 h-4 text-success" />
-                    <span className="text-sm font-medium">Order Queue</span>
+                    <Users className="w-4 h-4 sm:w-5 sm:h-5 text-warning" />
+                    <span className="text-xs sm:text-sm font-medium">Today's Orders</span>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span>Queued</span>
-                      <span className="font-medium">{orderCounts.queued}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Preparing</span>
-                      <span className="font-medium">{orderCounts.preparing}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Ready</span>
-                      <span className="font-medium">{orderCounts.ready}</span>
-                    </div>
+                  <p className="text-2xl sm:text-3xl font-bold text-warning">{todayOrdersCount}</p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Revenue: ₹{todayRevenue.toFixed(0)}
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Timer className="w-4 h-4 sm:w-5 sm:h-5 text-info" />
+                    <span className="text-xs sm:text-sm font-medium">Avg Prep Time</span>
                   </div>
+                  <p className="text-2xl sm:text-3xl font-bold text-info">{avgPrepTime}m</p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Order to ready
+                  </p>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="grid lg:grid-cols-2 gap-6">
-              {/* Daily Orders Chart */}
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              {/* Enhanced Revenue Chart */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Orders This Week</CardTitle>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                    <CardTitle className="text-lg">Revenue Trends</CardTitle>
+                    <Badge variant="outline" className="w-fit">{dateRange.replace('days', ' Days').replace('months', ' Months').replace('year', ' Year')}</Badge>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <LineChart data={weeklyOrders}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="day" />
-                      <YAxis />
+                  <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
+                    <BarChart data={periodData}>
+                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                      <XAxis 
+                        dataKey="period" 
+                        fontSize={10}
+                        angle={dateRange === '30days' || (dateRange === 'custom' && periodData.length > 7) ? -45 : 0}
+                        textAnchor={dateRange === '30days' || (dateRange === 'custom' && periodData.length > 7) ? 'end' : 'middle'}
+                        height={dateRange === '30days' || (dateRange === 'custom' && periodData.length > 7) ? 60 : 30}
+                        interval={periodData.length > 10 ? 1 : 0}
+                      />
+                      <YAxis fontSize={10} />
+                      <Tooltip 
+                        formatter={(value) => [`₹${value}`, 'Revenue']}
+                        labelFormatter={(label) => `Period: ${label}`}
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--background))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Bar 
+                        dataKey="revenue" 
+                        fill="hsl(var(--primary))" 
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Enhanced Orders Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Order Volume</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
+                    <LineChart data={periodData}>
+                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                      <XAxis 
+                        dataKey="period" 
+                        fontSize={10}
+                        angle={dateRange === '30days' || (dateRange === 'custom' && periodData.length > 7) ? -45 : 0}
+                        textAnchor={dateRange === '30days' || (dateRange === 'custom' && periodData.length > 7) ? 'end' : 'middle'}
+                        height={dateRange === '30days' || (dateRange === 'custom' && periodData.length > 7) ? 60 : 30}
+                        interval={periodData.length > 10 ? 1 : 0}
+                      />
+                      <YAxis fontSize={10} />
                       <Tooltip 
                         formatter={(value) => [`${value}`, 'Orders']}
-                        labelFormatter={(label) => `Day: ${label}`}
+                        labelFormatter={(label) => `Period: ${label}`}
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--background))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '6px'
+                        }}
                       />
                       <Line 
                         type="monotone" 
                         dataKey="orders" 
                         stroke="hsl(var(--primary))" 
-                        strokeWidth={2}
-                        dot={{ fill: 'hsl(var(--primary))' }}
+                        strokeWidth={3}
+                        dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 4 }}
+                        activeDot={{ r: 6, stroke: 'hsl(var(--primary))', strokeWidth: 2 }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
-
-              {/* Revenue Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Revenue Trends (Last 7 Days)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={weeklyOrders}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip 
-                        formatter={(value, name) => [`₹${value}`, 'Revenue']}
-                        labelFormatter={(label) => `Date: ${label}`}
-                      />
-                      <Bar dataKey="revenue" fill="hsl(var(--primary))" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
             </div>
 
-            <div className="grid lg:grid-cols-2 gap-6">
+            {/* Bottom Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {/* Top Dishes */}
+              <Card className="md:col-span-2 lg:col-span-1">
+                <CardHeader>
+                  <div className="flex items-center space-x-2">
+                    <PieChartIcon className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                    <CardTitle className="text-lg">Top Dishes</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 sm:space-y-4">
+                    {topDishes.map((dish, index) => (
+                      <div key={dish.name} className="flex items-center justify-between p-2 sm:p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                          <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 bg-primary/10 text-primary rounded-full text-xs sm:text-sm font-bold flex-shrink-0">
+                            {index + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-xs sm:text-sm truncate">{dish.name}</p>
+                            <p className="text-xs text-muted-foreground">₹{dish.revenue.toFixed(0)} revenue</p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="text-xs flex-shrink-0">{dish.count} sold</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Orders by Status */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Orders by Status</CardTitle>
+                  <CardTitle className="text-lg">Order Status Distribution</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
+                  <ResponsiveContainer width="100%" height={180} className="sm:h-[200px]">
                     <PieChart>
                       <Pie
                         data={ordersByStatus}
                         cx="50%"
                         cy="50%"
-                        outerRadius={80}
+                        outerRadius={60}
+                        className="sm:outerRadius-[70px]"
                         dataKey="count"
                         nameKey="status"
                       >
@@ -652,48 +1208,279 @@ export default function AdminDashboard() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip 
+                        formatter={(value) => [`${value}`, 'Orders']}
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--background))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '6px'
+                        }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div className="flex justify-center space-x-4 mt-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 sm:gap-2 mt-4">
                     {ordersByStatus.map((entry, index) => (
                       <div key={entry.status} className="flex items-center space-x-2">
                         <div 
-                          className="w-3 h-3 rounded-full" 
+                          className="w-3 h-3 rounded-full flex-shrink-0" 
                           style={{ backgroundColor: COLORS[index % COLORS.length] }}
                         />
-                        <span className="text-sm capitalize">{entry.status}</span>
+                        <span className="text-xs sm:text-sm capitalize truncate">{entry.status}: {entry.count}</span>
                       </div>
                     ))}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Key Metrics */}
+              {/* Key Performance Indicators */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Key Metrics</CardTitle>
+                  <CardTitle className="text-lg">Key Performance Indicators</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-muted-foreground">Total Orders</span>
-                    <span className="font-bold">{totalOrders}</span>
+                <CardContent className="space-y-3 sm:space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 sm:p-3 bg-muted/50 rounded-lg space-y-1 sm:space-y-0">
+                    <span className="text-xs sm:text-sm font-medium">Most Popular Item</span>
+                    <span className="text-xs sm:text-sm font-bold text-primary truncate">{mostOrderedItem}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-muted-foreground">Total Revenue</span>
-                    <span className="font-bold">₹{totalRevenue.toFixed(2)}</span>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 sm:p-3 bg-muted/50 rounded-lg space-y-1 sm:space-y-0">
+                    <span className="text-xs sm:text-sm font-medium">Average Order Value</span>
+                    <span className="text-xs sm:text-sm font-bold text-success">₹{averageOrderValue}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-muted-foreground">Most Ordered Item</span>
-                    <span className="font-bold">{mostOrderedItem}</span>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 sm:p-3 bg-muted/50 rounded-lg space-y-1 sm:space-y-0">
+                    <span className="text-xs sm:text-sm font-medium">Revenue Growth</span>
+                    <span className="text-xs sm:text-sm font-bold text-success">+{revenueGrowth}%</span>
                   </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-muted-foreground">Average Order Value</span>
-                    <span className="font-bold">₹{averageOrderValue}</span>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 sm:p-3 bg-muted/50 rounded-lg space-y-1 sm:space-y-0">
+                    <span className="text-xs sm:text-sm font-medium">Orders Today</span>
+                    <span className="text-xs sm:text-sm font-bold text-warning">{todayOrdersCount}</span>
                   </div>
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="broadcast" className="space-y-6">
+            {/* Broadcast Header */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center space-x-2">
+                  <Megaphone className="w-5 h-5 text-primary" />
+                  <CardTitle className="text-lg sm:text-xl">WhatsApp Broadcast</CardTitle>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Send promotional messages to your customers via WhatsApp
+                </p>
+              </CardHeader>
+            </Card>
+
+            {/* Broadcast Form */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center space-x-2">
+                    <MessageSquare className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-lg">Compose Message</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="broadcast-type" className="text-sm font-medium">Audience</Label>
+                    <select
+                      id="broadcast-type"
+                      value={broadcastType}
+                      onChange={(e) => setBroadcastType(e.target.value as 'all' | 'recent')}
+                      className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background"
+                    >
+                      <option value="recent">Recent Customers (Last 30 days)</option>
+                      <option value="all">All Customers</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="broadcast-message" className="text-sm font-medium">Message</Label>
+                    <textarea
+                      id="broadcast-message"
+                      value={broadcastMessage}
+                      onChange={(e) => setBroadcastMessage(e.target.value)}
+                      placeholder="Enter your promotional message here..."
+                      className="w-full mt-1 px-3 py-2 border rounded-md text-sm bg-background min-h-[120px] resize-none"
+                      maxLength={1000}
+                    />
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        {broadcastMessage.length}/1000 characters
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Message Templates</h4>
+                    <div className="grid grid-cols-1 gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="justify-start text-left h-auto p-3"
+                        onClick={() => setBroadcastMessage("🎉 Special Offer! Get 20% off on all orders today. Use code: SAVE20. Order now via WhatsApp!")}
+                      >
+                        <div>
+                          <div className="font-medium text-xs">Special Offer</div>
+                          <div className="text-xs text-muted-foreground">20% discount promotion</div>
+                        </div>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="justify-start text-left h-auto p-3"
+                        onClick={() => setBroadcastMessage("🍕 New Menu Alert! Try our delicious new dishes. Fresh ingredients, amazing taste. Order now!")}
+                      >
+                        <div>
+                          <div className="font-medium text-xs">New Menu</div>
+                          <div className="text-xs text-muted-foreground">New dishes announcement</div>
+                        </div>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="justify-start text-left h-auto p-3"
+                        onClick={() => setBroadcastMessage("🎊 Happy Holidays! Celebrate with our festive special menu. Limited time offer. Order today!")}
+                      >
+                        <div>
+                          <div className="font-medium text-xs">Festive Special</div>
+                          <div className="text-xs text-muted-foreground">Holiday promotion</div>
+                        </div>
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleSendBroadcast}
+                    disabled={isSendingBroadcast || !broadcastMessage.trim()}
+                    className="w-full"
+                  >
+                    {isSendingBroadcast ? (
+                      <>
+                        <Timer className="w-4 h-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send Broadcast
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Broadcast History */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center space-x-2">
+                    <UserCheck className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-lg">Broadcast History</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {broadcastHistory.length > 0 ? (
+                      broadcastHistory.slice(0, 5).map((broadcast, index) => (
+                        <div key={index} className="p-3 bg-muted/50 rounded-lg">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(broadcast.sentAt).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                            <Badge variant="secondary" className="text-xs">
+                              {broadcast.sentCount} sent
+                            </Badge>
+                          </div>
+                          <p className="text-sm line-clamp-2">{broadcast.message}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-sm text-muted-foreground">No broadcasts sent yet</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Broadcast Guidelines */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Broadcast Guidelines</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <h4 className="font-medium mb-2 text-success">✅ Best Practices</h4>
+                    <ul className="space-y-1 text-muted-foreground">
+                      <li>• Keep messages concise and clear</li>
+                      <li>• Include clear call-to-action</li>
+                      <li>• Use emojis to make messages engaging</li>
+                      <li>• Send during business hours</li>
+                      <li>• Personalize when possible</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-2 text-destructive">❌ Avoid</h4>
+                    <ul className="space-y-1 text-muted-foreground">
+                      <li>• Sending too frequently</li>
+                      <li>• Using all caps</li>
+                      <li>• Misleading offers</li>
+                      <li>• Sending late at night</li>
+                      <li>• Generic mass messages</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="broadcast" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center space-x-2">
+                  <Megaphone className="w-5 h-5 text-primary" />
+                  <CardTitle>WhatsApp Broadcast</CardTitle>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Send promotional messages to your customers
+                </p>
+                <div className="mt-2 p-2 bg-warning/10 border border-warning/20 rounded-md">
+                  <p className="text-xs text-warning-foreground">
+                    ⚠️ Currently only sending to whitelisted numbers for testing
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="broadcast-message">Message</Label>
+                    <textarea
+                      id="broadcast-message"
+                      value={broadcastMessage}
+                      onChange={(e) => setBroadcastMessage(e.target.value)}
+                      placeholder="Enter your promotional message..."
+                      className="w-full mt-1 px-3 py-2 border rounded-md min-h-[100px]"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleSendBroadcast}
+                    disabled={isSendingBroadcast || !broadcastMessage.trim()}
+                  >
+                    {isSendingBroadcast ? 'Sending...' : 'Send Broadcast'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
